@@ -11,14 +11,38 @@ function sendJSON(res, status, body) {
   res.end(data);
 }
 
+// SECURITY (found in cross-examination audit): this previously
+// accumulated request bodies with no size cap at all — a single request
+// with a multi-GB body would exhaust memory and crash the process. Very
+// reachable given the frontend posts photos as base64 data URLs. Now
+// capped, with the connection destroyed rather than just erroring, so a
+// malicious client can't keep streaming after being rejected.
+const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10MB — generous for a base64 photo
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let chunks = "";
-    req.on("data", (c) => (chunks += c));
+    let size = 0;
+    req.on("data", (c) => {
+      size += Buffer.byteLength(c);
+      if (size > MAX_BODY_BYTES) {
+        req.destroy();
+        reject(new Error("request body too large"));
+        return;
+      }
+      chunks += c;
+    });
     req.on("end", () => {
       if (!chunks) return resolve({});
       try {
-        resolve(JSON.parse(chunks));
+        const parsed = JSON.parse(chunks);
+        // Reject non-object bodies (arrays, strings, numbers) — every
+        // handler destructures body as an object, so a JSON array would
+        // produce confusing undefined-field behavior instead of a clean 400.
+        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return reject(new Error("body must be a JSON object"));
+        }
+        resolve(parsed);
       } catch (e) {
         reject(e);
       }

@@ -108,7 +108,11 @@ function createServer() {
       }
       sendJSON(res, 404, { error: "not found" });
     } catch (err) {
-      sendJSON(res, 500, { error: "internal error", detail: err.message });
+      // SECURITY (cross-examination audit): this used to return
+      // err.message to the client, leaking internal details that help an
+      // attacker map the system. Log server-side, return a generic error.
+      console.error("[circle] unhandled error:", err);
+      sendJSON(res, 500, { error: "internal error" });
     }
   });
 }
