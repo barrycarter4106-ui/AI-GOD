@@ -17,8 +17,10 @@ POST /stories/:id/react      { emoji }   [also emits over WS]
 - Story Service (validate the story is still active before accepting a connection)
 - Notification Service (live activity triggers, e.g. "3 friends watching now")
 
-## Open questions — MUST resolve before implementation starts
-- **Concurrent viewer ceiling**: spec says "cap generously above expected seed-test scale" but gives no number. Propose a concrete ceiling (e.g. 200 concurrent connections per story) for human sign-off before building.
+## Resolved (see ARCHITECTURE_CHANGELOG.md, Entry 2)
+- **Concurrent viewer ceiling**: 200 concurrent connections per story for MVP — well above expected seed-test scale (50–150 total users). Revisit before soft launch if event-anchored stories (Phase 2) drive higher concurrency.
+
+## Still open — resolve before implementation starts
 - **Reconnect handling**: what happens to a user's presence state on a dropped connection — immediate "left" status, or a grace period? Needs a decision, not an assumption.
 - **Emoji set**: "limited set" is specified but the actual list isn't. Get this from Design Agent before building the reaction endpoint.
 

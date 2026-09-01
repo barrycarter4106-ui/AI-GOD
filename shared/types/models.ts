@@ -11,7 +11,7 @@ export interface User {
   display_name: string;
   avatar_url: string;
   created_at: string; // ISO timestamp
-  auth_provider: "email" | "phone" | "oauth"; // GAP: which OAuth providers? see changelog
+  auth_provider: "email" | "phone" | "google" | "apple"; // resolved: Google + Apple OAuth for MVP, see changelog Entry 2
 }
 
 export interface Circle {
@@ -37,7 +37,7 @@ export interface Story {
   media_url: string;
   media_type: "image" | "video";
   created_at: string;
-  expires_at: string; // default created_at + 24h — GAP: cleanup mechanism TBD
+  expires_at: string; // default created_at + 24h — enforced at query-time (filter WHERE expires_at > now()), see changelog Entry 2
   is_collaborative: boolean;
   collab_window_closes_at: string | null;
 }
@@ -48,7 +48,7 @@ export interface StoryContribution {
   contributor_id: UUID; // FK -> User
   media_url: string;
   created_at: string;
-  // GAP: does this expire with parent story or independently? see changelog
+  // resolved: expires with parent Story (no independent expiry field), see changelog Entry 2
 }
 
 // --- Ephemeral / real-time layer ---

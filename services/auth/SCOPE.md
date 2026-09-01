@@ -16,9 +16,9 @@ POST /auth/login
 ## Talks to
 - Circle Service (on account creation, no direct DB access — use the API)
 
-## Open questions blocking full implementation
-- Which OAuth providers are in scope for launch? (`auth_provider` enum currently just says `oauth`)
-- Does phone auth require SMS verification infra? This is a vendor/cost decision for the human to confirm, not something to assume.
+## Resolved (see ARCHITECTURE_CHANGELOG.md, Entry 2)
+- OAuth providers for MVP: **Google and Apple only** (both required for iOS App Store compliance if Apple Sign-In is offered as an option alongside Google).
+- Phone auth SMS verification vendor: **still open** — needs a human decision on Twilio vs. alternatives before phone auth ships. Email + OAuth are sufficient for seed test; phone auth can land after Week 8.
 
 ## Out of scope
 - Anything in spec Section 5 (no monetization, no DMs, etc.)
