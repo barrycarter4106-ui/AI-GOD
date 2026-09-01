@@ -38,6 +38,17 @@ function encodeFrame(payload, opcode = 0x1) {
   return Buffer.concat([header, payloadBuf]);
 }
 
+// KNOWN LIMITATION (found in continued testing, deliberately not fixed):
+// this decoder does not check the FIN bit and has no continuation-frame
+// (opcode 0x0) reassembly. It assumes every frame is a complete message.
+// This is safe for Pulse's actual usage — every message we send (identify,
+// reactions) is a small JSON control message, far under any fragmentation
+// threshold real clients use — but it means this implementation is not a
+// spec-complete WebSocket server. A large message from an arbitrary
+// compliant client could be silently dropped. Swap for the real `ws`
+// package (see file header) before using this for anything beyond
+// Pulse's specific small-message use case.
+//
 // Decodes one frame from a buffer. Returns { opcode, payload, rest } or
 // null if the buffer doesn't yet contain a full frame.
 function decodeFrame(buf) {
