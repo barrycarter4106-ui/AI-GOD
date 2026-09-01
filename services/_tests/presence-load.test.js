@@ -1,7 +1,22 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const http = require("node:http");
 const { connect } = require("./ws-client");
 const { db, issueToken, uuid } = require("../_shared/store");
+
+// This file tests presence *mechanics* (reconnect grace, capacity) in
+// isolation — not cross-service authorization, which has its own
+// dedicated coverage in authorization.test.js. Since presence access
+// now requires a real Story Service round trip (added during the
+// engineering review's authorization fix), we stand up a minimal stub
+// that always grants access, rather than pulling the full Auth/Circle/
+// Story stack into what should be a focused mechanics test.
+const stubStoryService = http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end("{}");
+});
+const STUB_PORT = 5225;
+process.env.STORY_SERVICE_URL = `http://localhost:${STUB_PORT}`;
 
 const presence = require("../presence/index");
 const PORT = 5220;
@@ -21,11 +36,15 @@ function waitFor(ws, predicate, timeoutMs = 3000) {
 }
 
 test.before(async () => {
+  await new Promise((resolve) => stubStoryService.listen(STUB_PORT, resolve));
   server = presence.createServer();
   await new Promise((resolve) => server.listen(PORT, resolve));
 });
 
-test.after(() => server.close());
+test.after(() => {
+  server.close();
+  stubStoryService.close();
+});
 
 test("Presence: reconnecting within the grace period does NOT broadcast 'left'", async () => {
   const userA = { id: uuid(), handle: "reconnecter" };

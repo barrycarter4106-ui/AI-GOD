@@ -1,7 +1,19 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const http = require("node:http");
 const { connect } = require("./ws-client");
 const { db, issueToken, uuid, nowISO } = require("../_shared/store");
+
+// Same rationale as presence-load.test.js: this file tests presence
+// mechanics (join broadcast, reactions, emoji validation, auth) in
+// isolation from cross-service circle-membership authorization, which
+// is covered separately in authorization.test.js.
+const stubStoryService = http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end("{}");
+});
+const STUB_PORT = 5215;
+process.env.STORY_SERVICE_URL = `http://localhost:${STUB_PORT}`;
 
 const presence = require("../presence/index");
 const PORT = 5210;
@@ -21,11 +33,15 @@ function waitFor(ws, predicate, timeoutMs = 2000) {
 }
 
 test.before(async () => {
+  await new Promise((resolve) => stubStoryService.listen(STUB_PORT, resolve));
   server = presence.createServer();
   await new Promise((resolve) => server.listen(PORT, resolve));
 });
 
-test.after(() => server.close());
+test.after(() => {
+  server.close();
+  stubStoryService.close();
+});
 
 test("Presence: two viewers see each other join", async () => {
   const userA = { id: uuid(), handle: "a" };

@@ -9,12 +9,13 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { connect } = require("./ws-client");
 
+const PORTS = { auth: 5401, circle: 5402, story: 5403, presence: 5404 };
+process.env.STORY_SERVICE_URL = `http://localhost:${PORTS.story}`; // must be set before presence/index.js loads
+
 const authServer = require("../auth/index").createServer();
 const circleServer = require("../circle/index").createServer();
 const storyServer = require("../story/index").createServer();
 const presenceServer = require("../presence/index").createServer();
-
-const PORTS = { auth: 5401, circle: 5402, story: 5403, presence: 5404 };
 
 async function api(port, method, path, body, token) {
   const headers = { "Content-Type": "application/json" };
