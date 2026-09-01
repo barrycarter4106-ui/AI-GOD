@@ -68,6 +68,19 @@ async function handlePostStory(req, res, params) {
   return sendJSON(res, 201, story);
 }
 
+async function handleGetStory(req, res, params) {
+  // Added during engineering review: Presence Service needs a way to
+  // verify a user is actually a member of the circle that owns a story
+  // before letting them join presence or react — this endpoint exists
+  // specifically to close that gap (see authorization.test.js).
+  const user = requireAuth(req, res);
+  if (!user) return;
+  const story = db.stories.get(params.id);
+  if (!story || !isActive(story)) return sendJSON(res, 404, { error: "story not found or expired" });
+  if (!isMember(story.circle_id, user.id)) return sendJSON(res, 403, { error: "not a member of this circle" });
+  return sendJSON(res, 200, story);
+}
+
 async function handleContribute(req, res, params) {
   const user = requireAuth(req, res);
   if (!user) return;
@@ -112,6 +125,9 @@ function createServer() {
       }
       if (req.method === "POST" && (params = matchRoute("/stories/:id/contributions", pathname))) {
         return await handleContribute(req, res, params);
+      }
+      if (req.method === "GET" && (params = matchRoute("/stories/:id", pathname))) {
+        return await handleGetStory(req, res, params);
       }
       sendJSON(res, 404, { error: "not found" });
     } catch (err) {
