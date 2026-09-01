@@ -70,6 +70,10 @@ function leavePresence(storyId, userId) {
     broadcast(storyId, { type: "presence", status: "left", user_id: userId, viewer_count: room.size });
     if (room.size === 0) rooms.delete(storyId);
   }, RECONNECT_GRACE_MS);
+  entry.leaveTimer.unref(); // don't let this pending timer keep the process alive —
+  // found during code review: test runs were hanging ~30s waiting for this
+  // timer to fire even after the server closed. Also a minor resource-leak
+  // risk under real load with many concurrent leave events.
 }
 
 function reactionHandler(req, res, params) {
