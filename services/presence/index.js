@@ -3,8 +3,8 @@
 // Redis before this handles more than local/seed-test traffic)
 // Scope: services/presence/SCOPE.md
 // Open-decision defaults applied — see DECISIONS_PROPOSED.md:
-//   - 15s reconnect grace period before flipping to "left"
-//   - Fixed 6-emoji reaction set (no free text)
+//   - 30s reconnect grace period before flipping to "left" (confirmed)
+//   - Fixed 6-emoji reaction set (no free text) (confirmed)
 
 const http = require("http");
 const url = require("url");
@@ -12,7 +12,7 @@ const { attachWebSocketServer } = require("../_shared/ws-lite");
 const { matchRoute, sendJSON, readBody, authHeader } = require("../_shared/http");
 const { userFromToken } = require("../_shared/store");
 
-const RECONNECT_GRACE_MS = 15_000; // proposed default, see DECISIONS_PROPOSED.md
+const RECONNECT_GRACE_MS = 30_000; // confirmed by product owner — see DECISIONS.md
 const ALLOWED_EMOJI = ["❤️", "😂", "😮", "🔥", "👏", "😢"]; // proposed default
 
 const CONCURRENT_VIEWER_CEILING = 200; // resolved decision, per SCOPE.md
