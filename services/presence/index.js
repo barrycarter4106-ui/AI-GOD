@@ -17,6 +17,25 @@ const ALLOWED_EMOJI = ["❤️", "😂", "😮", "🔥", "👏", "😢"]; // pro
 
 const CONCURRENT_VIEWER_CEILING = 200; // resolved decision, per SCOPE.md
 
+const STORY_SERVICE_URL = process.env.STORY_SERVICE_URL || "http://localhost:4003";
+
+// Validates that (a) the story exists and is still active, and (b) the
+// requesting user is actually a member of the circle that owns it.
+// Added during engineering review — this check didn't exist before,
+// meaning any authenticated user could join presence or react on any
+// story if they knew (or guessed) its ID. See authorization.test.js.
+async function verifyStoryAccess(token, storyId) {
+  try {
+    const res = await fetch(`${STORY_SERVICE_URL}/stories/${storyId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.ok;
+  } catch (err) {
+    // Story Service unreachable — fail closed, not open.
+    return false;
+  }
+}
+
 // story_id -> Map<user_id, { ws, leaveTimer }>
 const rooms = new Map();
 
@@ -82,6 +101,9 @@ function reactionHandler(req, res, params) {
     const user = token && userFromToken(token);
     if (!user) return sendJSON(res, 401, { error: "authentication required" });
 
+    const allowed = await verifyStoryAccess(token, params.id);
+    if (!allowed) return sendJSON(res, 403, { error: "not a member of this circle" });
+
     const body = await readBody(req);
     if (!ALLOWED_EMOJI.includes(body.emoji)) {
       return sendJSON(res, 400, { error: `emoji must be one of: ${ALLOWED_EMOJI.join(" ")}` });
@@ -120,7 +142,7 @@ function createServer() {
       // libraries without relying on custom headers surviving the upgrade.
       let userId = null;
 
-      ws.onMessage = (raw) => {
+      ws.onMessage = async (raw) => {
         let msg;
         try {
           msg = JSON.parse(raw);
@@ -131,6 +153,12 @@ function createServer() {
           const user = userFromToken(msg.token);
           if (!user) {
             ws.send(JSON.stringify({ type: "error", reason: "invalid_token" }));
+            ws.close();
+            return;
+          }
+          const allowed = await verifyStoryAccess(msg.token, params.story_id);
+          if (!allowed) {
+            ws.send(JSON.stringify({ type: "error", reason: "not_a_member" }));
             ws.close();
             return;
           }
