@@ -75,6 +75,13 @@ async function handleContribute(req, res, params) {
   if (!story) return sendJSON(res, 404, { error: "story not found" });
   if (!story.is_collaborative) return sendJSON(res, 400, { error: "this story is not collaborative" });
   if (!isActive(story)) return sendJSON(res, 410, { error: "story has expired" });
+  // Bug found in review: collab_window_closes_at exists in the data model
+  // specifically to be a *separate*, often shorter window than the
+  // story's overall expiry — but contributions were only ever checked
+  // against expires_at, so the window field was silently unenforced.
+  if (story.collab_window_closes_at && new Date(story.collab_window_closes_at).getTime() <= Date.now()) {
+    return sendJSON(res, 410, { error: "collaborative window has closed" });
+  }
   if (!isMember(story.circle_id, user.id)) return sendJSON(res, 403, { error: "not a member of this circle" });
 
   const body = await readBody(req);
