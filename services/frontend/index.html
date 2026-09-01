@@ -227,6 +227,17 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
+// Bug found in continued testing pass: circle.name (fully user-controlled)
+// was being interpolated straight into innerHTML in two places, with no
+// escaping. A circle named e.g. `<img src=x onerror=alert(1)>` would
+// execute arbitrary JS for anyone who viewed the circles list or feed.
+// Every place user-supplied text goes into innerHTML must go through this.
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = String(str);
+  return div.innerHTML;
+}
+
 function toast(msg) {
   const t = $("toast");
   t.textContent = msg;
@@ -341,8 +352,8 @@ function renderCirclesList() {
     .map(
       (c) => `
     <div class="circleCard">
-      <div class="name">${c.name}</div>
-      <div class="meta">Invite token: ${c.invite_token}</div>
+      <div class="name">${escapeHtml(c.name)}</div>
+      <div class="meta">Invite token: ${escapeHtml(c.invite_token)}</div>
     </div>`
     )
     .join("");
@@ -350,7 +361,7 @@ function renderCirclesList() {
 
 function populateCircleSelect() {
   $("circleSelect").innerHTML = state.circles
-    .map((c) => `<option value="${c.id}">${c.name}</option>`)
+    .map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`)
     .join("") || `<option disabled selected>Create a circle first</option>`;
 }
 
@@ -410,7 +421,7 @@ async function renderFeed() {
       stories = await api(API.story, `/circles/${circle.id}/stories`, "GET");
     } catch (_) {}
     const block = document.createElement("div");
-    block.innerHTML = `<div class="sectionLabel">${circle.name}</div>`;
+    block.innerHTML = `<div class="sectionLabel">${escapeHtml(circle.name)}</div>`;
     const row = document.createElement("div");
     row.className = "storyRow";
     if (stories.length === 0) {
