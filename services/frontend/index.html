@@ -209,6 +209,18 @@
    porting to React Native is the natural next step with real npm access.
 ------------------------------------------------------------------- */
 
+// SECURITY NOTE (cross-examination audit): these are plain http:// and
+// hardcoded to localhost, which is correct for local development but MUST
+// become https:// before this is deployed anywhere real. Over plain HTTP,
+// the Authorization bearer token and the WebSocket identify message
+// (which also carries the token) are transmitted in cleartext and can be
+// intercepted on any shared network. The WebSocket URL derives from these
+// via .replace("http","ws"), so switching to https:// automatically gives
+// wss:// too.
+//
+// Token is deliberately held in memory only — NOT localStorage — so an
+// XSS bug can't trivially exfiltrate a persistent session. Tradeoff:
+// users get logged out on refresh. That's the right default for now.
 const API = {
   auth: "http://localhost:4001",
   circle: "http://localhost:4002",
