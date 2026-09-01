@@ -10,8 +10,10 @@ const db = {
   members: new Map(),     // `${circleId}:${userId}` -> CircleMember
   stories: new Map(),     // id -> Story
   contributions: new Map(), // id -> StoryContribution
-  sessions: new Map(),    // token -> userId
+  sessions: new Map(),    // token -> { userId, expiresAt }
 };
+
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 function uuid() {
   return crypto.randomUUID();
@@ -23,14 +25,20 @@ function nowISO() {
 
 function issueToken(userId) {
   const token = crypto.randomBytes(24).toString("hex");
-  db.sessions.set(token, userId);
+  db.sessions.set(token, { userId, expiresAt: Date.now() + SESSION_TTL_MS });
   return token;
 }
 
 function userFromToken(token) {
-  const userId = db.sessions.get(token);
-  if (!userId) return null;
-  return db.users.get(userId) || null;
+  const session = db.sessions.get(token);
+  if (!session) return null;
+  if (Date.now() > session.expiresAt) {
+    // Bug found in review: sessions never expired before this fix —
+    // a token issued once worked forever. Clean up the stale entry too.
+    db.sessions.delete(token);
+    return null;
+  }
+  return db.users.get(session.userId) || null;
 }
 
 function circleMembers(circleId) {
