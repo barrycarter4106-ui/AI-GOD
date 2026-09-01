@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Pulse</title>
+<style>
+  /* ---- Design tokens (matches brand established in pitch deck) ---- */
+  :root {
+    --ink: #1B1035;
+    --indigo: #2B1B4C;
+    --coral: #FF5470;
+    --gold: #FFD166;
+    --white: #FFFFFF;
+    --light: #F6F3FB;
+    --muted: #9B93B8;
+    --font-display: Cambria, Georgia, serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--ink); font-family: var(--font-ui); }
+
+  #app {
+    max-width: 430px;
+    margin: 0 auto;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background: var(--ink);
+    color: var(--white);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .screen { flex: 1; overflow-y: auto; padding: 20px 20px 90px; display: none; }
+  .screen.active { display: block; }
+
+  .wordmark { font-family: var(--font-display); font-weight: bold; font-size: 22px; color: var(--white); letter-spacing: 1px; }
+
+  /* ---- Auth ---- */
+  #authScreen { display: flex; flex-direction: column; justify-content: center; padding: 32px; height: 100%; }
+  #authScreen .wordmark { font-size: 48px; margin-bottom: 4px; }
+  #authScreen .tagline { color: var(--gold); font-style: italic; margin-bottom: 28px; font-size: 15px; }
+  input {
+    width: 100%; padding: 13px 14px; margin-bottom: 10px; border-radius: 10px;
+    border: 1px solid #3d2c5e; background: var(--indigo); color: var(--white); font-size: 15px;
+  }
+  input::placeholder { color: var(--muted); }
+  button {
+    width: 100%; padding: 14px; border-radius: 10px; border: none; font-size: 15px;
+    font-weight: 600; cursor: pointer; font-family: var(--font-ui);
+  }
+  .btn-primary { background: var(--coral); color: var(--white); }
+  .btn-ghost { background: transparent; color: var(--gold); margin-top: 12px; }
+  .authError { color: var(--coral); font-size: 13px; min-height: 18px; margin-top: 6px; }
+  .authToggle { text-align: center; margin-top: 18px; color: var(--muted); font-size: 14px; }
+  .authToggle a { color: var(--gold); text-decoration: none; }
+
+  /* ---- Camera tab (default landing screen) ---- */
+  #cameraScreen { display: none; padding: 0; }
+  #cameraScreen.active { display: flex; flex-direction: column; }
+  .cameraStage {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, var(--indigo), var(--ink));
+    position: relative;
+  }
+  .cameraPreview { max-width: 100%; max-height: 100%; border-radius: 16px; display: none; }
+  .cameraHint { color: var(--muted); text-align: center; padding: 0 40px; font-size: 14px; }
+  .shutterRow { padding: 24px; display: flex; justify-content: center; gap: 16px; align-items: center; }
+  .shutterBtn {
+    width: 72px; height: 72px; border-radius: 50%; background: var(--white); border: 4px solid var(--coral);
+    cursor: pointer;
+  }
+  .postComposer { padding: 16px 20px 90px; display: none; }
+  .postComposer.active { display: block; }
+  select { width: 100%; padding: 12px; border-radius: 10px; background: var(--indigo); color: var(--white); border: 1px solid #3d2c5e; margin-bottom: 10px; }
+  .collabToggle { display: flex; align-items: center; gap: 10px; margin: 12px 0; color: var(--light); font-size: 14px; }
+
+  /* ---- Feed / Circles list ---- */
+  .sectionLabel { color: var(--muted); font-size: 13px; margin: 18px 0 10px; }
+  .circleCard {
+    background: var(--indigo); border-radius: 14px; padding: 16px; margin-bottom: 10px; cursor: pointer;
+  }
+  .circleCard .name { font-weight: 600; font-size: 16px; }
+  .circleCard .meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .storyRow { display: flex; gap: 12px; overflow-x: auto; padding: 4px 0 12px; }
+  .storyThumb {
+    flex: none; width: 84px; height: 130px; border-radius: 12px; background: var(--indigo);
+    display: flex; flex-direction: column; justify-content: flex-end; padding: 8px; cursor: pointer;
+    background-size: cover; background-position: center; position: relative;
+  }
+  .liveDot { width: 8px; height: 8px; border-radius: 50%; background: var(--coral); display: inline-block; margin-right: 4px; animation: pulse 1.4s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .viewerCount { font-size: 11px; color: var(--white); background: rgba(0,0,0,0.5); border-radius: 8px; padding: 2px 6px; align-self: flex-start; }
+
+  /* ---- Story viewer overlay ---- */
+  #storyViewer {
+    position: absolute; inset: 0; background: var(--ink); display: none; flex-direction: column; z-index: 10;
+  }
+  #storyViewer.active { display: flex; }
+  .viewerTop { display: flex; align-items: center; justify-content: space-between; padding: 16px; }
+  .viewerAvatars { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--light); }
+  .closeBtn { background: none; border: none; color: var(--white); font-size: 22px; cursor: pointer; width: auto; padding: 0; }
+  .viewerMedia { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .viewerMedia img { max-width: 100%; max-height: 100%; }
+  .reactionBar { display: flex; justify-content: space-around; padding: 18px; }
+  .reactionBtn { background: none; border: none; font-size: 26px; cursor: pointer; width: auto; padding: 6px; }
+  .reactionFloat {
+    position: absolute; font-size: 22px; animation: floatUp 1.8s ease-out forwards; pointer-events: none;
+  }
+  @keyframes floatUp { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-160px); opacity: 0; } }
+
+  /* ---- Bottom nav ---- */
+  #nav {
+    position: absolute; bottom: 0; left: 0; right: 0; display: flex; background: var(--indigo);
+    border-top: 1px solid #3d2c5e; padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
+  }
+  .navBtn {
+    flex: 1; background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0;
+  }
+  .navBtn.active { color: var(--gold); }
+  .navIcon { font-size: 20px; }
+
+  .toast {
+    position: absolute; bottom: 90px; left: 20px; right: 20px; background: var(--gold); color: var(--ink);
+    padding: 12px 16px; border-radius: 10px; font-size: 14px; text-align: center; display: none; z-index: 20;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- AUTH -->
+  <div id="authScreen" class="screen active">
+    <div class="wordmark">PULSE</div>
+    <div class="tagline">Where moments happen live.</div>
+    <input id="authHandle" placeholder="Handle" />
+    <input id="authEmail" placeholder="Email" type="email" />
+    <input id="authPassword" placeholder="Password" type="password" />
+    <button class="btn-primary" id="authSubmit">Sign up</button>
+    <div class="authError" id="authError"></div>
+    <div class="authToggle">Already have an account? <a href="#" id="authToggleLink">Log in</a></div>
+  </div>
+
+  <!-- CAMERA (default landing tab per product spec) -->
+  <div id="cameraScreen" class="screen">
+    <div class="cameraStage">
+      <img id="cameraPreviewImg" class="cameraPreview" />
+      <div class="cameraHint" id="cameraHint">Tap the shutter to capture a moment for your circle.</div>
+    </div>
+    <div class="shutterRow">
+      <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none" />
+      <div class="shutterBtn" id="shutterBtn"></div>
+    </div>
+    <div class="postComposer" id="postComposer">
+      <select id="circleSelect"></select>
+      <label class="collabToggle"><input type="checkbox" id="collabToggle" style="width:auto" /> Collaborative story — let the circle add to it</label>
+      <button class="btn-primary" id="postBtn">Post to circle</button>
+    </div>
+  </div>
+
+  <!-- FEED -->
+  <div id="feedScreen" class="screen">
+    <div class="wordmark" style="font-size:20px">Live now</div>
+    <div id="feedCircles"></div>
+  </div>
+
+  <!-- CIRCLES / PROFILE -->
+  <div id="circlesScreen" class="screen">
+    <div class="wordmark" style="font-size:20px">Your circles</div>
+    <div class="sectionLabel">Start a circle</div>
+    <input id="newCircleName" placeholder="Circle name — e.g. Spring Break Trip" />
+    <button class="btn-primary" id="createCircleBtn">Create circle</button>
+    <div class="sectionLabel">Join with a link</div>
+    <input id="joinToken" placeholder="Invite token" />
+    <button class="btn-ghost" id="joinCircleBtn" style="background:var(--indigo);color:var(--white)">Join circle</button>
+    <div class="sectionLabel">Your circles</div>
+    <div id="circlesList"></div>
+  </div>
+
+  <!-- STORY VIEWER OVERLAY -->
+  <div id="storyViewer">
+    <div class="viewerTop">
+      <div class="viewerAvatars"><span class="liveDot"></span><span id="viewerCountLabel">1 watching</span></div>
+      <button class="closeBtn" id="closeViewerBtn">&times;</button>
+    </div>
+    <div class="viewerMedia"><img id="viewerImg" /></div>
+    <div class="reactionBar" id="reactionBar"></div>
+  </div>
+
+  <!-- NAV -->
+  <div id="nav">
+    <button class="navBtn active" data-tab="camera"><span class="navIcon">&#9679;</span>Camera</button>
+    <button class="navBtn" data-tab="feed"><span class="navIcon">&#9673;</span>Feed</button>
+    <button class="navBtn" data-tab="circles"><span class="navIcon">&#9670;</span>Circles</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* ------------------------------------------------------------------
+   Pulse — mobile web prototype (Frontend/Mobile UI Agent)
+   No build step / framework — plain HTML+CSS+JS, since this sandbox
+   has no npm registry access to install React Native tooling. This
+   proves out the interaction design against the real backend services;
+   porting to React Native is the natural next step with real npm access.
+------------------------------------------------------------------- */
+
+const API = {
+  auth: "http://localhost:4001",
+  circle: "http://localhost:4002",
+  story: "http://localhost:4003",
+  presence: "http://localhost:4004",
+};
+
+const state = {
+  token: null,
+  user: null,
+  circles: [],
+  capturedDataUrl: null,
+  ws: null,
+  currentStoryId: null,
+};
+
+const $ = (id) => document.getElementById(id);
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.style.display = "block";
+  setTimeout(() => (t.style.display = "none"), 2200);
+}
+
+async function api(base, path, method, body, auth = true) {
+  const headers = { "Content-Type": "application/json" };
+  if (auth && state.token) headers["Authorization"] = `Bearer ${state.token}`;
+  const res = await fetch(base + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || `request failed (${res.status})`);
+  return json;
+}
+
+/* ---------------- Auth ---------------- */
+let mode = "signup";
+$("authToggleLink").onclick = (e) => {
+  e.preventDefault();
+  mode = mode === "signup" ? "login" : "signup";
+  $("authSubmit").textContent = mode === "signup" ? "Sign up" : "Log in";
+  $("authHandle").style.display = mode === "signup" ? "block" : "none";
+  $("authToggleLink").textContent = mode === "signup" ? "Log in" : "Sign up";
+};
+
+$("authSubmit").onclick = async () => {
+  $("authError").textContent = "";
+  try {
+    const email = $("authEmail").value.trim();
+    const password = $("authPassword").value;
+    const handle = $("authHandle").value.trim();
+    const result =
+      mode === "signup"
+        ? await api(API.auth, "/auth/signup", "POST", { email, password, handle }, false)
+        : await api(API.auth, "/auth/login", "POST", { email, password }, false);
+    state.token = result.token;
+    state.user = result.user;
+    enterApp();
+  } catch (err) {
+    $("authError").textContent = err.message;
+  }
+};
+
+async function enterApp() {
+  $("authScreen").classList.remove("active");
+  switchTab("camera");
+  await loadCircles();
+}
+
+/* ---------------- Nav ---------------- */
+document.querySelectorAll(".navBtn").forEach((btn) => {
+  btn.onclick = () => switchTab(btn.dataset.tab);
+});
+
+function switchTab(tab) {
+  document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
+  document.querySelectorAll(".navBtn").forEach((b) => b.classList.remove("active"));
+  $(tab + "Screen").classList.add("active");
+  document.querySelector(`.navBtn[data-tab="${tab}"]`).classList.add("active");
+  if (tab === "feed") renderFeed();
+  if (tab === "circles") renderCirclesList();
+}
+
+/* ---------------- Circles ---------------- */
+async function loadCircles() {
+  // NOTE: prototype limitation — there's no "list my circles" endpoint
+  // in the Circle Service yet (out of scope for the Backend/API Agent's
+  // first pass). We track circle IDs client-side as they're created or
+  // joined this session. A GET /users/me/circles endpoint is the real
+  // fix — flagging for the next backend iteration.
+  renderCirclesList();
+}
+
+$("createCircleBtn").onclick = async () => {
+  const name = $("newCircleName").value.trim();
+  if (!name) return toast("Give your circle a name");
+  try {
+    const circle = await api(API.circle, "/circles", "POST", { name });
+    state.circles.push(circle);
+    $("newCircleName").value = "";
+    renderCirclesList();
+    populateCircleSelect();
+    toast(`Created "${circle.name}"`);
+  } catch (err) {
+    toast(err.message);
+  }
+};
+
+$("joinCircleBtn").onclick = async () => {
+  const token = $("joinToken").value.trim();
+  if (!token) return toast("Paste an invite token");
+  try {
+    const circle = await api(API.circle, `/circles/join/${token}`, "POST", {});
+    if (!state.circles.find((c) => c.id === circle.id)) state.circles.push(circle);
+    $("joinToken").value = "";
+    renderCirclesList();
+    populateCircleSelect();
+    toast(`Joined "${circle.name}"`);
+  } catch (err) {
+    toast(err.message);
+  }
+};
+
+function renderCirclesList() {
+  const el = $("circlesList");
+  if (state.circles.length === 0) {
+    el.innerHTML = `<div class="cameraHint">No circles yet — create one above or join with a link.</div>`;
+    return;
+  }
+  el.innerHTML = state.circles
+    .map(
+      (c) => `
+    <div class="circleCard">
+      <div class="name">${c.name}</div>
+      <div class="meta">Invite token: ${c.invite_token}</div>
+    </div>`
+    )
+    .join("");
+}
+
+function populateCircleSelect() {
+  $("circleSelect").innerHTML = state.circles
+    .map((c) => `<option value="${c.id}">${c.name}</option>`)
+    .join("") || `<option disabled selected>Create a circle first</option>`;
+}
+
+/* ---------------- Camera ---------------- */
+$("shutterBtn").onclick = () => $("cameraInput").click();
+
+$("cameraInput").onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    state.capturedDataUrl = reader.result;
+    $("cameraPreviewImg").src = state.capturedDataUrl;
+    $("cameraPreviewImg").style.display = "block";
+    $("cameraHint").style.display = "none";
+    populateCircleSelect();
+    $("postComposer").classList.add("active");
+  };
+  reader.readAsDataURL(file);
+};
+
+$("postBtn").onclick = async () => {
+  const circleId = $("circleSelect").value;
+  if (!circleId) return toast("Create or join a circle first");
+  if (!state.capturedDataUrl) return toast("Capture a photo first");
+  try {
+    // Prototype limitation: no CDN/media upload service exists yet, so
+    // we post the data URL directly as media_url. Real implementation
+    // needs an actual upload step before this media_url field is usable
+    // at any real scale — flagging for backend iteration.
+    await api(API.story, `/circles/${circleId}/stories`, "POST", {
+      media_url: state.capturedDataUrl,
+      media_type: "image",
+      is_collaborative: $("collabToggle").checked,
+    });
+    toast("Posted to your circle");
+    $("postComposer").classList.remove("active");
+    $("cameraPreviewImg").style.display = "none";
+    $("cameraHint").style.display = "block";
+    state.capturedDataUrl = null;
+  } catch (err) {
+    toast(err.message);
+  }
+};
+
+/* ---------------- Feed ---------------- */
+async function renderFeed() {
+  const el = $("feedCircles");
+  if (state.circles.length === 0) {
+    el.innerHTML = `<div class="cameraHint">Join or create a circle to see live stories.</div>`;
+    return;
+  }
+  el.innerHTML = "";
+  for (const circle of state.circles) {
+    let stories = [];
+    try {
+      stories = await api(API.story, `/circles/${circle.id}/stories`, "GET");
+    } catch (_) {}
+    const block = document.createElement("div");
+    block.innerHTML = `<div class="sectionLabel">${circle.name}</div>`;
+    const row = document.createElement("div");
+    row.className = "storyRow";
+    if (stories.length === 0) {
+      row.innerHTML = `<div class="cameraHint" style="padding:0">No active stories yet.</div>`;
+    } else {
+      stories.forEach((s) => {
+        const thumb = document.createElement("div");
+        thumb.className = "storyThumb";
+        thumb.style.backgroundImage = `url(${s.media_url})`;
+        thumb.innerHTML = `<span class="viewerCount"><span class="liveDot"></span>live</span>`;
+        thumb.onclick = () => openStory(s);
+        row.appendChild(thumb);
+      });
+    }
+    block.appendChild(row);
+    el.appendChild(block);
+  }
+}
+
+/* ---------------- Story viewer + live presence ---------------- */
+const REACTIONS = ["❤️", "😂", "😮", "🔥", "👏", "😢"];
+$("reactionBar").innerHTML = REACTIONS.map((e) => `<button class="reactionBtn" data-emoji="${e}">${e}</button>`).join("");
+
+function openStory(story) {
+  state.currentStoryId = story.id;
+  $("viewerImg").src = story.media_url;
+  $("storyViewer").classList.add("active");
+  connectPresence(story.id);
+}
+
+$("closeViewerBtn").onclick = () => {
+  $("storyViewer").classList.remove("active");
+  if (state.ws) state.ws.close();
+  state.ws = null;
+};
+
+function connectPresence(storyId) {
+  if (state.ws) state.ws.close();
+  const wsUrl = API.presence.replace("http", "ws") + `/presence/${storyId}`;
+  const ws = new WebSocket(wsUrl);
+  state.ws = ws;
+
+  ws.onopen = () => ws.send(JSON.stringify({ type: "identify", token: state.token }));
+
+  ws.onmessage = (evt) => {
+    const msg = JSON.parse(evt.data);
+    if (msg.type === "presence") {
+      $("viewerCountLabel").textContent = `${msg.viewer_count} watching`;
+    }
+    if (msg.type === "reaction") {
+      spawnFloatingReaction(msg.emoji);
+    }
+  };
+}
+
+document.querySelectorAll(".reactionBtn").forEach((btn) => {
+  btn.onclick = async () => {
+    if (!state.currentStoryId) return;
+    try {
+      await api(API.story.replace("4003", "4004"), `/stories/${state.currentStoryId}/react`, "POST", {
+        emoji: btn.dataset.emoji,
+      });
+    } catch (err) {
+      toast(err.message);
+    }
+  };
+});
+
+function spawnFloatingReaction(emoji) {
+  const el = document.createElement("div");
+  el.className = "reactionFloat";
+  el.textContent = emoji;
+  el.style.left = 20 + Math.random() * 250 + "px";
+  el.style.bottom = "90px";
+  $("storyViewer").appendChild(el);
+  setTimeout(() => el.remove(), 1800);
+}
+</script>
+</body>
+</html>
