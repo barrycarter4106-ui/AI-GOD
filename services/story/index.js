@@ -50,6 +50,13 @@ async function handlePostStory(req, res, params) {
   if (!body.media_url || !body.media_type) {
     return sendJSON(res, 400, { error: "media_url and media_type are required" });
   }
+  // Bug found in continued testing: media_type was accepted as any
+  // truthy value even though the data model defines it as a strict
+  // "image" | "video" enum — a client could post media_type: "malware"
+  // and it would be stored and served back to every circle member.
+  if (!["image", "video"].includes(body.media_type)) {
+    return sendJSON(res, 400, { error: 'media_type must be "image" or "video"' });
+  }
   const createdAt = nowISO();
   const story = {
     id: uuid(),

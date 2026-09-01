@@ -49,4 +49,30 @@ function isMember(circleId, userId) {
   return db.members.has(`${circleId}:${userId}`);
 }
 
-module.exports = { db, uuid, nowISO, issueToken, userFromToken, circleMembers, isMember };
+// Bug found in continued testing: expired sessions and expired stories
+// were only ever filtered out at READ time (userFromToken checks
+// expiry on lookup; Story Service filters expired stories from list
+// results) — but the actual Map entries were never removed, so memory
+// grows without bound for as long as the process runs. Fine for a
+// short-lived local test, a real problem for anything long-running.
+// Runs every 10 minutes; unref'd so it doesn't keep the process alive
+// (same lesson as the Presence Service timer-leak fix).
+function cleanupExpired() {
+  const now = Date.now();
+  for (const [token, session] of db.sessions) {
+    if (now > session.expiresAt) db.sessions.delete(token);
+  }
+  for (const [id, story] of db.stories) {
+    if (new Date(story.expires_at).getTime() <= now) {
+      db.stories.delete(id);
+      for (const [cid, contrib] of db.contributions) {
+        if (contrib.story_id === id) db.contributions.delete(cid);
+      }
+    }
+  }
+}
+
+const cleanupTimer = setInterval(cleanupExpired, 10 * 60 * 1000);
+cleanupTimer.unref();
+
+module.exports = { db, uuid, nowISO, issueToken, userFromToken, circleMembers, isMember, cleanupExpired };

@@ -21,6 +21,15 @@ async function handleSignup(req, res) {
   if (!email || !password || !handle) {
     return sendJSON(res, 400, { error: "email, password, and handle are required" });
   }
+  // Bugs found in continued testing: neither of these was validated at
+  // all before — "x" was accepted as a password, and "not-an-email" was
+  // accepted as an email. Basic sanity checks, not full RFC validation.
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return sendJSON(res, 400, { error: "email is not a valid format" });
+  }
+  if (password.length < 8) {
+    return sendJSON(res, 400, { error: "password must be at least 8 characters" });
+  }
   const existing = [...db.users.values()].find((u) => u.email === email || u.handle === handle);
   if (existing) {
     return sendJSON(res, 409, { error: "email or handle already in use" });
