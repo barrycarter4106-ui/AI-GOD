@@ -1,0 +1,181 @@
+openapi: 3.0.3
+info:
+  title: Pulse Circle Service
+  version: "1.0.0"
+  description: Circle and CircleMember ownership; invite token issuance/validation.
+servers:
+  - url: http://localhost:4002
+security:
+  - bearerAuth: []
+paths:
+  /circles:
+    post:
+      operationId: createCircle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: Weekend Trip
+      responses:
+        "201":
+          description: Circle created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Circle"
+        "400":
+          description: name is required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /circles/{id}:
+    get:
+      operationId: getCircle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Circle detail with member count
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Circle"
+                  - type: object
+                    properties:
+                      members:
+                        type: integer
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a member of this circle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Circle not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /circles/{id}/invite:
+    post:
+      operationId: createInvite
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: New invite link (rotates the circle's active token)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invite_link:
+                    type: string
+                    example: "pulse://join/1a2b3c4d5e6f"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Only the owner can generate invites
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Circle not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /circles/join/{token}:
+    post:
+      operationId: joinCircle
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "1a2b3c4d5e6f"
+      responses:
+        "200":
+          description: Joined (or already a member of) the circle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Circle"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Invalid or expired invite
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Circle:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        owner_id:
+          type: string
+          format: uuid
+        theme:
+          type: object
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        invite_token:
+          type: string
+    Error:
+      type: object
+      properties:
+        error:
+          type: string

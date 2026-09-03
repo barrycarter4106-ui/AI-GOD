@@ -19,9 +19,9 @@ POST /stories/:id/contributions    { media }   [collaborative only]
 - Media/CDN (upload, not owned by this service)
 - Presence Service (validates a story is still active before a WS connection opens)
 
-## Open questions — resolve before full implementation
-- **Expiry cleanup mechanism**: is `expires_at` enforced by a scheduled job, DB TTL, or checked at query-time only? This changes whether this service needs a background worker.
-- **Contribution expiry**: does a `StoryContribution` expire independently or always with its parent `Story`? Spec doesn't say — default assumption until confirmed: contributions expire with the parent.
+## Resolved (see ARCHITECTURE_CHANGELOG.md, Entry 2)
+- **Expiry cleanup**: query-time filtering (`WHERE expires_at > now()`) for MVP. No background worker needed at seed-test scale. Revisit if a scheduled purge job becomes necessary for storage/cost reasons post-launch.
+- **Contribution expiry**: `StoryContribution` always expires with its parent `Story` — no independent `expires_at` field.
 
 ## Out of scope
 - Algorithmic/discovery feed

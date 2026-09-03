@@ -1,0 +1,85 @@
+openapi: 3.0.3
+info:
+  title: Pulse Presence Service
+  version: "1.0.0"
+  description: >
+    Ephemeral presence/reaction layer. HTTP surface covers reactions and
+    health; live viewer presence itself is a WebSocket at
+    ws://localhost:4004/presence/{story_id} (client sends
+    {"type":"identify","token":"..."} as its first message) — not
+    representable in OpenAPI and not covered by this spec/scan.
+servers:
+  - url: http://localhost:4004
+security:
+  - bearerAuth: []
+paths:
+  /stories/{id}/react:
+    post:
+      operationId: reactToStory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [emoji]
+              properties:
+                emoji:
+                  type: string
+                  enum: ["❤️", "😂", "😮", "🔥", "👏", "😢"]
+      responses:
+        "201":
+          description: Reaction broadcast to the room
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        "400":
+          description: emoji must be one of the allowed set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /health:
+    get:
+      operationId: health
+      security: []
+      responses:
+        "200":
+          description: Service health and active room count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  rooms:
+                    type: integer
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
