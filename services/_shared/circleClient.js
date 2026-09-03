@@ -39,4 +39,43 @@ function isCircleMember(circleId, token) {
   });
 }
 
-module.exports = { isCircleMember };
+// Used by Story to notify a collaborative story's other circle members —
+// Story has no membership data of its own, so it asks Circle for the list.
+function getCircleMembers(circleId, token) {
+  return new Promise((resolve) => {
+    if (!token || !circleId) return resolve([]);
+
+    let base;
+    try {
+      base = new URL(process.env.CIRCLE_SERVICE_URL || "http://localhost:4002");
+    } catch (_) {
+      return resolve([]);
+    }
+
+    const req = http.request(
+      {
+        hostname: base.hostname,
+        port: base.port || 80,
+        path: `/circles/${encodeURIComponent(circleId)}/members`,
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          if (res.statusCode !== 200) return resolve([]);
+          try {
+            resolve(JSON.parse(data).member_ids || []);
+          } catch (_) {
+            resolve([]);
+          }
+        });
+      }
+    );
+    req.on("error", () => resolve([]));
+    req.end();
+  });
+}
+
+module.exports = { isCircleMember, getCircleMembers };

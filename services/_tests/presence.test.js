@@ -2,17 +2,25 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { connect } = require("./ws-client");
 const { uuid } = require("../_shared/store");
+const { getTriggeredFor } = require("../notification");
 
-const AUTH_PORT = 5209, PORT = 5210;
+const AUTH_PORT = 5209, PORT = 5210, CIRCLE_PORT = 5211, STORY_PORT = 5212;
 
 // Presence verifies tokens by calling Auth over HTTP (see
 // services/_shared/authClient.js) — point it at this test's Auth
 // instance, and mint tokens via real signups rather than poking Auth's
 // db directly (that only worked by accident, via Node's module cache,
 // when everything ran in one process — see the shared-session-store fix).
+// The "friends watching" trigger also needs real Circle/Story instances,
+// since Presence asks Story for a story's author (storyClient.js), and
+// Story in turn asks Circle for membership (circleClient.js).
 process.env.AUTH_SERVICE_URL = `http://localhost:${AUTH_PORT}`;
+process.env.CIRCLE_SERVICE_URL = `http://localhost:${CIRCLE_PORT}`;
+process.env.STORY_SERVICE_URL = `http://localhost:${STORY_PORT}`;
 
 const authServer = require("../auth/index").createServer();
+const circleServer = require("../circle/index").createServer();
+const storyServer = require("../story/index").createServer();
 const presence = require("../presence/index");
 let server;
 
@@ -41,12 +49,16 @@ function waitFor(ws, predicate, timeoutMs = 2000) {
 
 test.before(async () => {
   await new Promise((resolve) => authServer.listen(AUTH_PORT, resolve));
+  await new Promise((resolve) => circleServer.listen(CIRCLE_PORT, resolve));
+  await new Promise((resolve) => storyServer.listen(STORY_PORT, resolve));
   server = presence.createServer();
   await new Promise((resolve) => server.listen(PORT, resolve));
 });
 
 test.after(() => {
   server.close();
+  storyServer.close();
+  circleServer.close();
   authServer.close();
 });
 
@@ -111,4 +123,44 @@ test("Presence: reaction endpoint requires authentication", async () => {
     body: JSON.stringify({ emoji: "❤️" }),
   });
   assert.equal(res.status, 401);
+});
+
+test("Presence: notifies the story author when the first viewer joins", async () => {
+  const { user: author, token: authorToken } = await signup("presence-author");
+  const { user: viewer, token: viewerToken } = await signup("presence-viewer");
+
+  const circleRes = await fetch(`http://localhost:${CIRCLE_PORT}/circles`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${authorToken}` },
+    body: JSON.stringify({ name: "Presence Test Circle" }),
+  });
+  const circle = await circleRes.json();
+
+  const inviteRes = await fetch(`http://localhost:${CIRCLE_PORT}/circles/${circle.id}/invite`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${authorToken}` },
+  });
+  const { invite_link } = await inviteRes.json();
+  const inviteToken = invite_link.split("/").pop();
+  await fetch(`http://localhost:${CIRCLE_PORT}/circles/join/${inviteToken}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${viewerToken}` },
+  });
+
+  const storyRes = await fetch(`http://localhost:${STORY_PORT}/circles/${circle.id}/stories`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${authorToken}` },
+    body: JSON.stringify({ media_url: "https://cdn.pulse.app/x.jpg", media_type: "image" }),
+  });
+  const story = await storyRes.json();
+
+  const ws = await connect(PORT, `/presence/${story.id}`);
+  ws.send(JSON.stringify({ type: "identify", token: viewerToken }));
+  await new Promise((r) => setTimeout(r, 200)); // let identify + the async author lookup settle
+
+  const events = getTriggeredFor(author.id).filter((e) => e.type === "friends_watching" && e.payload.story_id === story.id);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].payload.viewer_id, viewer.id);
+
+  ws.close();
 });
