@@ -81,6 +81,51 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /circles/{id}/members:
+    get:
+      operationId: listCircleMembers
+      description: >
+        Internal, service-to-service endpoint. Story calls this via
+        circleClient.js to find who to notify when a collaborative
+        story opens.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Member user ids
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  member_ids:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a member of this circle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Circle not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /circles/{id}/invite:
     post:
       operationId: createInvite

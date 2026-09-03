@@ -94,6 +94,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /stories/{id}:
+    get:
+      operationId: getStory
+      description: >
+        Internal, service-to-service endpoint. Presence calls this via
+        storyClient.js to find a story's author for the "friends
+        watching" notification trigger.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Story detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Story"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a member of this circle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Story not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /stories/{id}/contributions:
     post:
       operationId: contributeToStory
