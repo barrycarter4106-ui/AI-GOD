@@ -28,8 +28,23 @@ This should ultimately come from the Design Agent (per SCOPE.md) — this
 is an engineering placeholder to unblock building the endpoint, not a
 final design decision.
 
+## 3. "Friends watching" notification frequency
+
+**Proposal: notify the story author once per room, on the first viewer's
+join — not on every subsequent join.**
+
+Reasoning: `services/notification/SCOPE.md` flags "notification frequency
+caps per user per day" as an open question needing Content/Editing Agent
+input, and explicitly warns against generic re-engagement pings. Notifying
+on *every* join would spam an author whose story has a dozen viewers
+trickle in over an hour. Firing once, on the transition from zero viewers
+to one, keeps the notification meaningful ("someone's watching now")
+without needing a real frequency-cap policy yet. This is a placeholder to
+unblock wiring Presence to the Notification Service (per its own SCOPE.md:
+"Talks to: Presence Service") — revisit once product specifies real caps.
+
 ---
 
-**Implementation proceeds using these two defaults.** Both are called out
+**Implementation proceeds using these three defaults.** All are called out
 in code comments at the exact point they're used, so they're easy to find
 and change once you confirm or override them.

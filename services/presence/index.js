@@ -11,6 +11,8 @@ const url = require("url");
 const { attachWebSocketServer } = require("../_shared/ws-lite");
 const { matchRoute, sendJSON, readBody, authHeader } = require("../_shared/http");
 const { verifyToken } = require("../_shared/authClient");
+const { getStory } = require("../_shared/storyClient");
+const { notify } = require("../notification");
 
 const RECONNECT_GRACE_MS = 15_000; // proposed default, see DECISIONS_PROPOSED.md
 const ALLOWED_EMOJI = ["❤️", "😂", "😮", "🔥", "👏", "😢"]; // proposed default
@@ -133,7 +135,18 @@ function createServer() {
             return;
           }
           userId = user.id;
-          joinPresence(params.story_id, userId, ws);
+          const joined = joinPresence(params.story_id, userId, ws);
+
+          // Proposed default (see DECISIONS_PROPOSED.md): notify the
+          // author only on the room's *first* viewer, not every join —
+          // frequency caps beyond that are still an open product
+          // question per presence/SCOPE.md.
+          if (joined && getRoom(params.story_id).size === 1) {
+            const story = await getStory(params.story_id, msg.token);
+            if (story && story.author_id !== userId) {
+              notify(story.author_id, "friends_watching", { story_id: params.story_id, viewer_id: userId });
+            }
+          }
         }
       };
 

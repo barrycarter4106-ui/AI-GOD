@@ -9,7 +9,8 @@ const url = require("url");
 const { db, uuid, nowISO } = require("../_shared/store");
 const { sendJSON, readBody, authHeader, matchRoute } = require("../_shared/http");
 const { verifyToken } = require("../_shared/authClient");
-const { isCircleMember } = require("../_shared/circleClient");
+const { isCircleMember, getCircleMembers } = require("../_shared/circleClient");
+const { notify } = require("../notification");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -71,7 +72,34 @@ async function handlePostStory(req, res, params) {
       : null,
   };
   db.stories.set(story.id, story);
+
+  if (story.is_collaborative) {
+    // Per SCOPE.md: Notification Service "Talks to: ... Story Service"
+    // is implied by the collaborative-story flow — let the rest of the
+    // circle know there's a story to add to. Circle owns membership, so
+    // ask it for the member list rather than guessing here.
+    const memberIds = await getCircleMembers(params.id, authHeader(req));
+    for (const memberId of memberIds) {
+      if (memberId === user.id) continue; // don't notify the author about their own post
+      notify(memberId, "collab_story_opened", { story_id: story.id, circle_id: params.id });
+    }
+  }
+
   return sendJSON(res, 201, story);
+}
+
+// Service-to-service lookup (Presence uses this via storyClient.js to
+// find a story's author for the "friends watching" trigger). Same
+// membership guard as the list endpoint, not a public read.
+async function handleGetStory(req, res, params) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  const story = db.stories.get(params.id);
+  if (!story) return sendJSON(res, 404, { error: "story not found" });
+  if (!(await isCircleMember(story.circle_id, authHeader(req)))) {
+    return sendJSON(res, 403, { error: "not a member of this circle" });
+  }
+  return sendJSON(res, 200, story);
 }
 
 async function handleContribute(req, res, params) {
@@ -113,6 +141,9 @@ function createServer() {
       }
       if (req.method === "POST" && (params = matchRoute("/stories/:id/contributions", pathname))) {
         return await handleContribute(req, res, params);
+      }
+      if (req.method === "GET" && (params = matchRoute("/stories/:id", pathname))) {
+        return await handleGetStory(req, res, params);
       }
       sendJSON(res, 404, { error: "not found" });
     } catch (err) {
