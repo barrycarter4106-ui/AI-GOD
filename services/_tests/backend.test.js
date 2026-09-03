@@ -176,6 +176,17 @@ test("Story: collaborative story accepts contributions from other members", asyn
   assert.equal(contrib.body.story_id, post.body.id);
 });
 
+test("Story: GET /stories/:id includes contributions, same as the list endpoint", async () => {
+  const list = await request(STORY_PORT, "GET", `/circles/${circleId}/stories`, null, token);
+  const collabStory = list.body.find((s) => s.is_collaborative);
+  assert.ok(collabStory, "expected a collaborative story from the previous test");
+
+  const single = await request(STORY_PORT, "GET", `/stories/${collabStory.id}`, null, token);
+  assert.equal(single.status, 200);
+  assert.ok(Array.isArray(single.body.contributions), "GET /stories/:id must include contributions");
+  assert.equal(single.body.contributions.length, collabStory.contributions.length);
+});
+
 test("Story: notifies other circle members when a collaborative story opens", async () => {
   const events = getTriggeredFor(friendUserId).filter(
     (e) => e.type === "collab_story_opened" && e.payload.circle_id === circleId

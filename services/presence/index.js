@@ -9,7 +9,7 @@
 const http = require("http");
 const url = require("url");
 const { attachWebSocketServer } = require("../_shared/ws-lite");
-const { matchRoute, sendJSON, readBody, authHeader } = require("../_shared/http");
+const { matchRoute, sendJSON, readBody, authHeader, applyCors } = require("../_shared/http");
 const { verifyToken } = require("../_shared/authClient");
 const { getStory } = require("../_shared/storyClient");
 const { notify } = require("../notification");
@@ -96,6 +96,7 @@ async function reactionHandler(req, res, params) {
 
 function createServer() {
   const server = http.createServer(async (req, res) => {
+    if (applyCors(req, res)) return;
     const { pathname } = url.parse(req.url);
     let params;
     try {

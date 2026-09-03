@@ -8,7 +8,7 @@ const http = require("http");
 const crypto = require("crypto");
 const url = require("url");
 const { db, uuid, nowISO, issueToken, userFromToken } = require("../_shared/store");
-const { sendJSON, readBody, matchRoute, authHeader } = require("../_shared/http");
+const { sendJSON, readBody, matchRoute, authHeader, applyCors } = require("../_shared/http");
 
 function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString("hex");
@@ -76,6 +76,7 @@ function handleVerify(req, res) {
 
 function createServer() {
   return http.createServer(async (req, res) => {
+    if (applyCors(req, res)) return;
     const { pathname } = url.parse(req.url);
     try {
       if (req.method === "POST" && matchRoute("/auth/signup", pathname)) {
