@@ -10,7 +10,7 @@ const http = require("http");
 const url = require("url");
 const { attachWebSocketServer } = require("../_shared/ws-lite");
 const { matchRoute, sendJSON, readBody, authHeader } = require("../_shared/http");
-const { userFromToken } = require("../_shared/store");
+const { verifyToken } = require("../_shared/authClient");
 
 const RECONNECT_GRACE_MS = 15_000; // proposed default, see DECISIONS_PROPOSED.md
 const ALLOWED_EMOJI = ["❤️", "😂", "😮", "🔥", "👏", "😢"]; // proposed default
@@ -72,39 +72,41 @@ function leavePresence(storyId, userId) {
   }, RECONNECT_GRACE_MS);
 }
 
-function reactionHandler(req, res, params) {
-  return (async () => {
-    const token = authHeader(req);
-    const user = token && userFromToken(token);
-    if (!user) return sendJSON(res, 401, { error: "authentication required" });
+async function reactionHandler(req, res, params) {
+  const token = authHeader(req);
+  const user = token && (await verifyToken(token));
+  if (!user) return sendJSON(res, 401, { error: "authentication required" });
 
-    const body = await readBody(req);
-    if (!ALLOWED_EMOJI.includes(body.emoji)) {
-      return sendJSON(res, 400, { error: `emoji must be one of: ${ALLOWED_EMOJI.join(" ")}` });
-    }
+  const body = await readBody(req);
+  if (!ALLOWED_EMOJI.includes(body.emoji)) {
+    return sendJSON(res, 400, { error: `emoji must be one of: ${ALLOWED_EMOJI.join(" ")}` });
+  }
 
-    broadcast(params.id, {
-      type: "reaction",
-      story_id: params.id,
-      user_id: user.id,
-      emoji: body.emoji,
-      created_at: new Date().toISOString(),
-    });
-    return sendJSON(res, 201, { ok: true });
-  })();
+  broadcast(params.id, {
+    type: "reaction",
+    story_id: params.id,
+    user_id: user.id,
+    emoji: body.emoji,
+    created_at: new Date().toISOString(),
+  });
+  return sendJSON(res, 201, { ok: true });
 }
 
 function createServer() {
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     const { pathname } = url.parse(req.url);
     let params;
-    if (req.method === "POST" && (params = matchRoute("/stories/:id/react", pathname))) {
-      return reactionHandler(req, res, params);
+    try {
+      if (req.method === "POST" && (params = matchRoute("/stories/:id/react", pathname))) {
+        return await reactionHandler(req, res, params);
+      }
+      if (req.method === "GET" && matchRoute("/health", pathname)) {
+        return sendJSON(res, 200, { ok: true, rooms: rooms.size });
+      }
+      sendJSON(res, 404, { error: "not found" });
+    } catch (err) {
+      sendJSON(res, 500, { error: "internal error", detail: err.message });
     }
-    if (req.method === "GET" && matchRoute("/health", pathname)) {
-      return sendJSON(res, 200, { ok: true, rooms: rooms.size });
-    }
-    sendJSON(res, 404, { error: "not found" });
   });
 
   attachWebSocketServer(
@@ -116,7 +118,7 @@ function createServer() {
       // libraries without relying on custom headers surviving the upgrade.
       let userId = null;
 
-      ws.onMessage = (raw) => {
+      ws.onMessage = async (raw) => {
         let msg;
         try {
           msg = JSON.parse(raw);
@@ -124,7 +126,7 @@ function createServer() {
           return;
         }
         if (msg.type === "identify" && msg.token) {
-          const user = userFromToken(msg.token);
+          const user = await verifyToken(msg.token);
           if (!user) {
             ws.send(JSON.stringify({ type: "error", reason: "invalid_token" }));
             ws.close();

@@ -1,11 +1,30 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { connect } = require("./ws-client");
-const { db, issueToken, uuid, nowISO } = require("../_shared/store");
+const { uuid } = require("../_shared/store");
 
+const AUTH_PORT = 5209, PORT = 5210;
+
+// Presence verifies tokens by calling Auth over HTTP (see
+// services/_shared/authClient.js) — point it at this test's Auth
+// instance, and mint tokens via real signups rather than poking Auth's
+// db directly (that only worked by accident, via Node's module cache,
+// when everything ran in one process — see the shared-session-store fix).
+process.env.AUTH_SERVICE_URL = `http://localhost:${AUTH_PORT}`;
+
+const authServer = require("../auth/index").createServer();
 const presence = require("../presence/index");
-const PORT = 5210;
 let server;
+
+async function signup(handle) {
+  const res = await fetch(`http://localhost:${AUTH_PORT}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: `${handle}@pulse.app`, password: "hunter2hunter2", handle }),
+  });
+  const body = await res.json();
+  return { user: body.user, token: body.token };
+}
 
 function waitFor(ws, predicate, timeoutMs = 2000) {
   return new Promise((resolve, reject) => {
@@ -21,19 +40,19 @@ function waitFor(ws, predicate, timeoutMs = 2000) {
 }
 
 test.before(async () => {
+  await new Promise((resolve) => authServer.listen(AUTH_PORT, resolve));
   server = presence.createServer();
   await new Promise((resolve) => server.listen(PORT, resolve));
 });
 
-test.after(() => server.close());
+test.after(() => {
+  server.close();
+  authServer.close();
+});
 
 test("Presence: two viewers see each other join", async () => {
-  const userA = { id: uuid(), handle: "a" };
-  const userB = { id: uuid(), handle: "b" };
-  db.users.set(userA.id, userA);
-  db.users.set(userB.id, userB);
-  const tokenA = issueToken(userA.id);
-  const tokenB = issueToken(userB.id);
+  const { user: userA, token: tokenA } = await signup("presence-a");
+  const { user: userB, token: tokenB } = await signup("presence-b");
   const storyId = uuid();
 
   const wsA = await connect(PORT, `/presence/${storyId}`);
@@ -51,9 +70,7 @@ test("Presence: two viewers see each other join", async () => {
 });
 
 test("Presence: reaction broadcasts to viewers over the WebSocket", async () => {
-  const user = { id: uuid(), handle: "reactor" };
-  db.users.set(user.id, user);
-  const token = issueToken(user.id);
+  const { user, token } = await signup("presence-reactor");
   const storyId = uuid();
 
   const ws = await connect(PORT, `/presence/${storyId}`);
@@ -76,9 +93,7 @@ test("Presence: reaction broadcasts to viewers over the WebSocket", async () => 
 });
 
 test("Presence: rejects an emoji outside the fixed set", async () => {
-  const user = { id: uuid(), handle: "spammer" };
-  db.users.set(user.id, user);
-  const token = issueToken(user.id);
+  const { token } = await signup("presence-spammer");
   const storyId = uuid();
 
   const res = await fetch(`http://localhost:${PORT}/stories/${storyId}/react`, {

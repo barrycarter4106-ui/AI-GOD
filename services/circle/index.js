@@ -5,12 +5,13 @@
 const http = require("http");
 const crypto = require("crypto");
 const url = require("url");
-const { db, uuid, nowISO, userFromToken, circleMembers, isMember } = require("../_shared/store");
+const { db, uuid, nowISO, circleMembers, isMember } = require("../_shared/store");
 const { sendJSON, readBody, authHeader, matchRoute } = require("../_shared/http");
+const { verifyToken } = require("../_shared/authClient");
 
-function requireAuth(req, res) {
+async function requireAuth(req, res) {
   const token = authHeader(req);
-  const user = token && userFromToken(token);
+  const user = token && (await verifyToken(token));
   if (!user) {
     sendJSON(res, 401, { error: "authentication required" });
     return null;
@@ -19,7 +20,7 @@ function requireAuth(req, res) {
 }
 
 async function handleCreateCircle(req, res) {
-  const user = requireAuth(req, res);
+  const user = await requireAuth(req, res);
   if (!user) return;
   const body = await readBody(req);
   if (!body.name) return sendJSON(res, 400, { error: "name is required" });
@@ -43,7 +44,7 @@ async function handleCreateCircle(req, res) {
 }
 
 async function handleGetCircle(req, res, params) {
-  const user = requireAuth(req, res);
+  const user = await requireAuth(req, res);
   if (!user) return;
   const circle = db.circles.get(params.id);
   if (!circle) return sendJSON(res, 404, { error: "circle not found" });
@@ -52,7 +53,7 @@ async function handleGetCircle(req, res, params) {
 }
 
 async function handleInvite(req, res, params) {
-  const user = requireAuth(req, res);
+  const user = await requireAuth(req, res);
   if (!user) return;
   const circle = db.circles.get(params.id);
   if (!circle) return sendJSON(res, 404, { error: "circle not found" });
@@ -65,7 +66,7 @@ async function handleInvite(req, res, params) {
 }
 
 async function handleJoin(req, res, params) {
-  const user = requireAuth(req, res);
+  const user = await requireAuth(req, res);
   if (!user) return;
   const circle = [...db.circles.values()].find((c) => c.invite_token === params.token);
   if (!circle) return sendJSON(res, 404, { error: "invalid or expired invite" });

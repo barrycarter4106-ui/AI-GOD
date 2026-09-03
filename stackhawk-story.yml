@@ -1,0 +1,27 @@
+app:
+  applicationId: a52ce766-f7de-4f5b-8b76-facdd7bd14a6
+  env: Development
+  host: http://localhost:4003
+  openApiConf:
+    filePath: openapi-story.yaml
+  authentication:
+    usernamePassword:
+      type: JSON
+      loginPath: http://localhost:4001/auth/login
+      usernameField: email
+      passwordField: password
+      scanUsername: hawkscan@pulse.local
+      scanPassword: HawkScan123!
+    tokenExtraction:
+      type: TOKEN_PATH
+      value: "$.token"
+    tokenAuthorization:
+      type: HEADER
+      value: Authorization
+      tokenType: Bearer
+    loggedInIndicator: "^\\["
+    loggedOutIndicator: ".*authentication required.*"
+    testPath:
+      path: /circles/07c9438c-bc99-4da4-9175-4aa6c42bfbb9/stories
+      type: BODY
+      fail: ".*authentication required.*"

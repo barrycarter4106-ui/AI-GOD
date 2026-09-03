@@ -1,0 +1,29 @@
+app:
+  applicationId: a247b24f-b625-4f16-bdbb-aba19ba19266
+  env: Development
+  host: http://localhost:4004
+  openApiConf:
+    filePath: openapi-presence.yaml
+  authentication:
+    usernamePassword:
+      type: JSON
+      loginPath: http://localhost:4001/auth/login
+      usernameField: email
+      passwordField: password
+      scanUsername: hawkscan@pulse.local
+      scanPassword: HawkScan123!
+    tokenExtraction:
+      type: TOKEN_PATH
+      value: "$.token"
+    tokenAuthorization:
+      type: HEADER
+      value: Authorization
+      tokenType: Bearer
+    loggedInIndicator: ".*\"ok\":true.*"
+    loggedOutIndicator: ".*authentication required.*"
+    testPath:
+      path: /stories/00000000-0000-0000-0000-000000000000/react
+      type: BODY
+      requestMethod: POST
+      requestBody: '{"emoji":"🔥"}'
+      fail: ".*authentication required.*"

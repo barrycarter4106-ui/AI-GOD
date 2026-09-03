@@ -2,11 +2,18 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
+const AUTH_PORT = 5101, CIRCLE_PORT = 5102, STORY_PORT = 5103;
+
+// Circle/Story verify tokens by calling Auth over HTTP (see
+// services/_shared/authClient.js), and Story checks circle membership
+// by calling Circle (see services/_shared/circleClient.js) — point both
+// at this test's own instances before any requests are made.
+process.env.AUTH_SERVICE_URL = `http://localhost:${AUTH_PORT}`;
+process.env.CIRCLE_SERVICE_URL = `http://localhost:${CIRCLE_PORT}`;
+
 const authServer = require("../auth/index").createServer();
 const circleServer = require("../circle/index").createServer();
 const storyServer = require("../story/index").createServer();
-
-const AUTH_PORT = 5101, CIRCLE_PORT = 5102, STORY_PORT = 5103;
 
 async function request(port, method, path, body, token) {
   const headers = { "Content-Type": "application/json" };

@@ -1,0 +1,216 @@
+openapi: 3.0.3
+info:
+  title: Pulse Story Service
+  version: "1.0.0"
+  description: Story and StoryContribution; expiry enforced at query time.
+servers:
+  - url: http://localhost:4003
+security:
+  - bearerAuth: []
+paths:
+  /circles/{id}/stories:
+    get:
+      operationId: listStories
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Active (non-expired) stories for the circle
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Story"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a member of this circle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      operationId: postStory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [media_url, media_type]
+              properties:
+                media_url:
+                  type: string
+                  format: uri
+                  example: https://cdn.example.com/media/abc123.jpg
+                media_type:
+                  type: string
+                  enum: [image, video]
+                is_collaborative:
+                  type: boolean
+                  default: false
+                collab_window_closes_at:
+                  type: string
+                  format: date-time
+      responses:
+        "201":
+          description: Story created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Story"
+        "400":
+          description: media_url and media_type are required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a member of this circle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /stories/{id}/contributions:
+    post:
+      operationId: contributeToStory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [media_url]
+              properties:
+                media_url:
+                  type: string
+                  format: uri
+                  example: https://cdn.example.com/media/def456.jpg
+      responses:
+        "201":
+          description: Contribution added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryContribution"
+        "400":
+          description: media_url is required, or story is not collaborative
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a member of this circle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Story not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "410":
+          description: Story has expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Story:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        circle_id:
+          type: string
+          format: uuid
+        author_id:
+          type: string
+          format: uuid
+        media_url:
+          type: string
+        media_type:
+          type: string
+          enum: [image, video]
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        is_collaborative:
+          type: boolean
+        collab_window_closes_at:
+          type: string
+          nullable: true
+          format: date-time
+        contributions:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoryContribution"
+    StoryContribution:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        story_id:
+          type: string
+          format: uuid
+        contributor_id:
+          type: string
+          format: uuid
+        media_url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
