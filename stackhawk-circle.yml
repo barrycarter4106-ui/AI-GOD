@@ -11,7 +11,7 @@ app:
       usernameField: email
       passwordField: password
       scanUsername: hawkscan@pulse.local
-      scanPassword: HawkScan123!
+      scanPassword: JIfBbQShqOcpkciFRPcD-w04
     tokenExtraction:
       type: TOKEN_PATH
       value: "$.token"
@@ -22,6 +22,6 @@ app:
     loggedInIndicator: ".*\"members\":.*"
     loggedOutIndicator: ".*authentication required.*"
     testPath:
-      path: /circles/07c9438c-bc99-4da4-9175-4aa6c42bfbb9
+      path: /circles/68f9a1fa-9c86-40fb-b450-4b420b51b4da
       type: BODY
       fail: ".*authentication required.*"

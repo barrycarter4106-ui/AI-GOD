@@ -11,7 +11,7 @@ app:
       usernameField: email
       passwordField: password
       scanUsername: hawkscan@pulse.local
-      scanPassword: HawkScan123!
+      scanPassword: JIfBbQShqOcpkciFRPcD-w04
     tokenExtraction:
       type: TOKEN_PATH
       value: "$.token"
