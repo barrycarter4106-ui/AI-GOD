@@ -1,0 +1,27 @@
+app:
+  applicationId: bb40dc46-8e16-4c39-9bf0-42b7c939eeb4
+  env: Development
+  host: http://localhost:4001
+  openApiConf:
+    filePath: openapi-auth.yaml
+  authentication:
+    usernamePassword:
+      type: JSON
+      loginPath: /auth/login
+      usernameField: email
+      passwordField: password
+      scanUsername: hawkscan@pulse.local
+      scanPassword: HawkScan123!
+    tokenExtraction:
+      type: TOKEN_PATH
+      value: "$.token"
+    tokenAuthorization:
+      type: HEADER
+      value: Authorization
+      tokenType: Bearer
+    loggedInIndicator: ".*\"user\":.*"
+    loggedOutIndicator: ".*invalid or expired token.*"
+    testPath:
+      path: /auth/verify
+      type: BODY
+      fail: ".*invalid or expired token.*"
