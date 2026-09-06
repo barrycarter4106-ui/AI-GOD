@@ -1,0 +1,27 @@
+app:
+  applicationId: 92deeb0f-bbed-4d55-af1b-cd5339cc443e
+  env: Development
+  host: http://localhost:4002
+  openApiConf:
+    filePath: openapi-circle.yaml
+  authentication:
+    usernamePassword:
+      type: JSON
+      loginPath: http://localhost:4001/auth/login
+      usernameField: email
+      passwordField: password
+      scanUsername: hawkscan@pulse.local
+      scanPassword: JIfBbQShqOcpkciFRPcD-w04
+    tokenExtraction:
+      type: TOKEN_PATH
+      value: "$.token"
+    tokenAuthorization:
+      type: HEADER
+      value: Authorization
+      tokenType: Bearer
+    loggedInIndicator: ".*\"members\":.*"
+    loggedOutIndicator: ".*authentication required.*"
+    testPath:
+      path: /circles/68f9a1fa-9c86-40fb-b450-4b420b51b4da
+      type: BODY
+      fail: ".*authentication required.*"

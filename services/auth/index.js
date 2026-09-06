@@ -7,8 +7,8 @@
 const http = require("http");
 const crypto = require("crypto");
 const url = require("url");
-const { db, uuid, nowISO, issueToken } = require("../_shared/store");
-const { sendJSON, readBody, matchRoute } = require("../_shared/http");
+const { db, uuid, nowISO, issueToken, userFromToken } = require("../_shared/store");
+const { sendJSON, readBody, matchRoute, authHeader } = require("../_shared/http");
 
 function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString("hex");
@@ -91,6 +91,18 @@ async function handleLogin(req, res) {
   return sendJSON(res, 200, { user: publicUser, token });
 }
 
+// Called by other services to resolve a token they received but can't
+// look up themselves — Auth is the only service that owns db.sessions.
+// Least privilege: callers only ever need the user's id (see
+// authClient.js consumers), so that's all this returns — no email or
+// other profile fields leave this service over this path.
+function handleVerify(req, res) {
+  const token = authHeader(req);
+  const user = token && userFromToken(token);
+  if (!user) return sendJSON(res, 401, { error: "invalid or expired token" });
+  return sendJSON(res, 200, { user: { id: user.id } });
+}
+
 function createServer() {
   return http.createServer(async (req, res) => {
     const { pathname } = url.parse(req.url);
@@ -100,6 +112,9 @@ function createServer() {
       }
       if (req.method === "POST" && matchRoute("/auth/login", pathname)) {
         return await handleLogin(req, res);
+      }
+      if (req.method === "GET" && matchRoute("/auth/verify", pathname)) {
+        return handleVerify(req, res);
       }
       sendJSON(res, 404, { error: "not found" });
     } catch (err) {
