@@ -14,12 +14,27 @@ function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString("hex");
 }
 
+// Used when a login is attempted for an email that doesn't exist, so we
+// still burn equivalent CPU and return in comparable time — otherwise a
+// fast "no such user" response reveals which emails are registered.
+const DUMMY_SALT = crypto.randomBytes(16).toString("hex");
+const DUMMY_HASH = crypto.scryptSync("dummy-password-never-matches", DUMMY_SALT, 64).toString("hex");
+
 async function handleSignup(req, res) {
   const body = await readBody(req);
   const { email, password, handle, display_name } = body;
 
   if (!email || !password || !handle) {
     return sendJSON(res, 400, { error: "email, password, and handle are required" });
+  }
+  // Bugs found in continued testing: neither of these was validated at
+  // all before — "x" was accepted as a password, and "not-an-email" was
+  // accepted as an email. Basic sanity checks, not full RFC validation.
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return sendJSON(res, 400, { error: "email is not a valid format" });
+  }
+  if (password.length < 8) {
+    return sendJSON(res, 400, { error: "password must be at least 8 characters" });
   }
   const existing = [...db.users.values()].find((u) => u.email === email || u.handle === handle);
   if (existing) {
@@ -54,7 +69,21 @@ async function handleLogin(req, res) {
     return sendJSON(res, 400, { error: "email and password are required" });
   }
   const user = [...db.users.values()].find((u) => u.email === email);
-  if (!user || hashPassword(password, user._salt) !== user._passwordHash) {
+
+  // SECURITY (found in cross-examination audit): this previously compared
+  // password hashes with !==, which short-circuits on the first differing
+  // byte and leaks timing information. Now uses crypto.timingSafeEqual.
+  // We also always perform a hash operation even when the user doesn't
+  // exist, so response time doesn't reveal whether an email is registered
+  // (user enumeration).
+  const salt = user ? user._salt : DUMMY_SALT;
+  const candidate = Buffer.from(hashPassword(password, salt), "hex");
+  const expected = user ? Buffer.from(user._passwordHash, "hex") : Buffer.from(DUMMY_HASH, "hex");
+
+  const matches =
+    candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
+
+  if (!user || !matches) {
     return sendJSON(res, 401, { error: "invalid credentials" });
   }
   const token = issueToken(user.id);
@@ -90,7 +119,11 @@ function createServer() {
       }
       sendJSON(res, 404, { error: "not found" });
     } catch (err) {
-      sendJSON(res, 500, { error: "internal error", detail: err.message });
+      // SECURITY (cross-examination audit): this used to return
+      // err.message to the client, leaking internal details that help an
+      // attacker map the system. Log server-side, return a generic error.
+      console.error("[auth] unhandled error:", err);
+      sendJSON(res, 500, { error: "internal error" });
     }
   });
 }

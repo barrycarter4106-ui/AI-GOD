@@ -64,6 +64,13 @@ async function handlePostStory(req, res, params) {
   if (!body.media_url || !body.media_type) {
     return sendJSON(res, 400, { error: "media_url and media_type are required" });
   }
+  // Bug found in continued testing: media_type was accepted as any
+  // truthy value even though the data model defines it as a strict
+  // "image" | "video" enum — a client could post media_type: "malware"
+  // and it would be stored and served back to every circle member.
+  if (!["image", "video"].includes(body.media_type)) {
+    return sendJSON(res, 400, { error: 'media_type must be "image" or "video"' });
+  }
   const createdAt = nowISO();
   const story = {
     id: uuid(),
@@ -95,16 +102,20 @@ async function handlePostStory(req, res, params) {
   return sendJSON(res, 201, story);
 }
 
-// Used both by Presence (via storyClient.js, to find a story's author
-// for the "friends watching" trigger) and directly by the mobile app's
-// StoryViewerScreen. Same membership guard as the list endpoint, not a
-// public read; same withContributions() enrichment as the list endpoint
-// too, so a single-story fetch isn't missing data the list has.
+// Used both by Presence (via storyClient.js — to find a story's author for
+// the "friends watching" trigger, and to verify a user is a member of the
+// circle that owns a story before letting them join presence or react; see
+// authorization.test.js) and directly by the mobile app's StoryViewerScreen.
+// Same membership guard as the list endpoint, not a public read; same
+// withContributions() enrichment as the list endpoint too, so a single-story
+// fetch isn't missing data the list has.
 async function handleGetStory(req, res, params) {
   const user = await requireAuth(req, res);
   if (!user) return;
   const story = db.stories.get(params.id);
-  if (!story) return sendJSON(res, 404, { error: "story not found" });
+  if (!story || !isActive(story)) {
+    return sendJSON(res, 404, { error: "story not found or expired" });
+  }
   if (!(await isCircleMember(story.circle_id, authHeader(req)))) {
     return sendJSON(res, 403, { error: "not a member of this circle" });
   }
@@ -118,6 +129,13 @@ async function handleContribute(req, res, params) {
   if (!story) return sendJSON(res, 404, { error: "story not found" });
   if (!story.is_collaborative) return sendJSON(res, 400, { error: "this story is not collaborative" });
   if (!isActive(story)) return sendJSON(res, 410, { error: "story has expired" });
+  // Bug found in review: collab_window_closes_at exists in the data model
+  // specifically to be a *separate*, often shorter window than the
+  // story's overall expiry — but contributions were only ever checked
+  // against expires_at, so the window field was silently unenforced.
+  if (story.collab_window_closes_at && new Date(story.collab_window_closes_at).getTime() <= Date.now()) {
+    return sendJSON(res, 410, { error: "collaborative window has closed" });
+  }
   if (!(await isCircleMember(story.circle_id, authHeader(req)))) {
     return sendJSON(res, 403, { error: "not a member of this circle" });
   }
@@ -157,7 +175,11 @@ function createServer() {
       }
       sendJSON(res, 404, { error: "not found" });
     } catch (err) {
-      sendJSON(res, 500, { error: "internal error", detail: err.message });
+      // SECURITY (cross-examination audit): this used to return
+      // err.message to the client, leaking internal details that help an
+      // attacker map the system. Log server-side, return a generic error.
+      console.error("[story] unhandled error:", err);
+      sendJSON(res, 500, { error: "internal error" });
     }
   });
 }

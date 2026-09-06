@@ -101,6 +101,19 @@ test("Circle: owner can generate an invite link", async () => {
   inviteLink = body.invite_link;
 });
 
+test("Circle: calling invite again without regenerate returns the SAME link (bug fix)", async () => {
+  const { status, body } = await request(CIRCLE_PORT, "POST", `/circles/${circleId}/invite`, {}, token);
+  assert.equal(status, 200);
+  assert.equal(body.invite_link, inviteLink, "invite link must not silently change on repeat calls");
+});
+
+test("Circle: regenerate:true explicitly rotates the token", async () => {
+  const { status, body } = await request(CIRCLE_PORT, "POST", `/circles/${circleId}/invite`, { regenerate: true }, token);
+  assert.equal(status, 200);
+  assert.notEqual(body.invite_link, inviteLink, "explicit regenerate should produce a new link");
+  inviteLink = body.invite_link; // update for the join test below
+});
+
 test("Circle: a second user can join via invite link", async () => {
   const signup = await request(AUTH_PORT, "POST", "/auth/signup", {
     email: "friend@pulse.app",
@@ -201,4 +214,34 @@ test("Story: list only returns non-expired stories to members", async () => {
   assert.equal(status, 200);
   assert.ok(Array.isArray(body));
   assert.ok(body.length >= 2);
+});
+
+test("Story: contributions are rejected once collab_window_closes_at has passed (bug fix)", async () => {
+  const post = await request(
+    STORY_PORT,
+    "POST",
+    `/circles/${circleId}/stories`,
+    {
+      media_url: "https://cdn.pulse.app/closing-window.jpg",
+      media_type: "image",
+      is_collaborative: true,
+      collab_window_closes_at: new Date(Date.now() - 1000).toISOString(), // already closed
+    },
+    token
+  );
+  assert.equal(post.status, 201);
+
+  const login = await request(AUTH_PORT, "POST", "/auth/login", {
+    email: "friend@pulse.app",
+    password: "hunter2hunter2",
+  });
+
+  const contrib = await request(
+    STORY_PORT,
+    "POST",
+    `/stories/${post.body.id}/contributions`,
+    { media_url: "https://cdn.pulse.app/too-late.jpg" },
+    login.body.token
+  );
+  assert.equal(contrib.status, 410, "contribution after the collab window closes must be rejected");
 });
