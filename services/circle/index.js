@@ -60,10 +60,18 @@ async function handleInvite(req, res, params) {
   if (!circle) return sendJSON(res, 404, { error: "circle not found" });
   if (circle.owner_id !== user.id) return sendJSON(res, 403, { error: "only the owner can generate invites" });
 
-  // Rotate token — spec: single active token per circle
-  circle.invite_token = crypto.randomBytes(12).toString("hex");
-  db.circles.set(circle.id, circle);
-  return sendJSON(res, 200, { invite_link: `pulse://join/${circle.invite_token}` });
+  // Bug found in review: this used to rotate the token on every call,
+  // silently breaking any link the owner had already shared. Now it's
+  // idempotent by default — only rotates when explicitly requested,
+  // matching the "single active token... rotate on regeneration" intent
+  // in SCOPE.md (regeneration should be a deliberate action, not a side
+  // effect of just checking the current link).
+  const body = await readBody(req).catch(() => ({}));
+  if (body.regenerate) {
+    circle.invite_token = crypto.randomBytes(12).toString("hex");
+    db.circles.set(circle.id, circle);
+  }
+  return sendJSON(res, 200, { invite_link: `pulse://join/${circle.invite_token}`, regenerated: !!body.regenerate });
 }
 
 async function handleJoin(req, res, params) {
@@ -121,7 +129,11 @@ function createServer() {
       }
       sendJSON(res, 404, { error: "not found" });
     } catch (err) {
-      sendJSON(res, 500, { error: "internal error", detail: err.message });
+      // SECURITY (cross-examination audit): this used to return
+      // err.message to the client, leaking internal details that help an
+      // attacker map the system. Log server-side, return a generic error.
+      console.error("[circle] unhandled error:", err);
+      sendJSON(res, 500, { error: "internal error" });
     }
   });
 }
