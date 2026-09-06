@@ -7,7 +7,7 @@
 const http = require("http");
 const url = require("url");
 const { db, uuid, nowISO } = require("../_shared/store");
-const { sendJSON, readBody, authHeader, matchRoute } = require("../_shared/http");
+const { sendJSON, readBody, authHeader, matchRoute, applyCors } = require("../_shared/http");
 const { verifyToken } = require("../_shared/authClient");
 const { isCircleMember, getCircleMembers } = require("../_shared/circleClient");
 const { notify } = require("../notification");
@@ -28,6 +28,18 @@ function isActive(story) {
   return new Date(story.expires_at).getTime() > Date.now();
 }
 
+// Shared by the list and single-story endpoints so they can't drift —
+// GET /stories/:id used to return the bare story with no contributions
+// field at all, since only the list endpoint did this enrichment.
+function withContributions(story) {
+  return {
+    ...story,
+    contributions: story.is_collaborative
+      ? [...db.contributions.values()].filter((c) => c.story_id === story.id)
+      : undefined,
+  };
+}
+
 async function handleListStories(req, res, params) {
   const user = await requireAuth(req, res);
   if (!user) return;
@@ -37,12 +49,7 @@ async function handleListStories(req, res, params) {
 
   const stories = [...db.stories.values()]
     .filter((s) => s.circle_id === params.id && isActive(s)) // query-time expiry filter, resolved decision
-    .map((s) => ({
-      ...s,
-      contributions: s.is_collaborative
-        ? [...db.contributions.values()].filter((c) => c.story_id === s.id)
-        : undefined,
-    }));
+    .map(withContributions);
   return sendJSON(res, 200, stories);
 }
 
@@ -95,9 +102,13 @@ async function handlePostStory(req, res, params) {
   return sendJSON(res, 201, story);
 }
 
-// Service-to-service lookup (Presence uses this via storyClient.js to
-// verify a user is a member of the circle that owns a story before
-// letting them join presence or react — see authorization.test.js).
+// Used both by Presence (via storyClient.js — to find a story's author for
+// the "friends watching" trigger, and to verify a user is a member of the
+// circle that owns a story before letting them join presence or react; see
+// authorization.test.js) and directly by the mobile app's StoryViewerScreen.
+// Same membership guard as the list endpoint, not a public read; same
+// withContributions() enrichment as the list endpoint too, so a single-story
+// fetch isn't missing data the list has.
 async function handleGetStory(req, res, params) {
   const user = await requireAuth(req, res);
   if (!user) return;
@@ -108,7 +119,7 @@ async function handleGetStory(req, res, params) {
   if (!(await isCircleMember(story.circle_id, authHeader(req)))) {
     return sendJSON(res, 403, { error: "not a member of this circle" });
   }
-  return sendJSON(res, 200, story);
+  return sendJSON(res, 200, withContributions(story));
 }
 
 async function handleContribute(req, res, params) {
@@ -146,6 +157,7 @@ async function handleContribute(req, res, params) {
 
 function createServer() {
   return http.createServer(async (req, res) => {
+    if (applyCors(req, res)) return;
     const { pathname } = url.parse(req.url);
     let params;
     try {

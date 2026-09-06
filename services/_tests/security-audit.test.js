@@ -7,6 +7,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const PORTS = { auth: 5601, circle: 5602, story: 5603, presence: 5604 };
+process.env.AUTH_SERVICE_URL = `http://localhost:${PORTS.auth}`;
+process.env.CIRCLE_SERVICE_URL = `http://localhost:${PORTS.circle}`;
 process.env.STORY_SERVICE_URL = `http://localhost:${PORTS.story}`;
 
 const authServer = require("../auth/index").createServer();

@@ -6,7 +6,7 @@ const http = require("http");
 const crypto = require("crypto");
 const url = require("url");
 const { db, uuid, nowISO, circleMembers, isMember } = require("../_shared/store");
-const { sendJSON, readBody, authHeader, matchRoute } = require("../_shared/http");
+const { sendJSON, readBody, authHeader, matchRoute, applyCors } = require("../_shared/http");
 const { verifyToken } = require("../_shared/authClient");
 const { notify } = require("../notification");
 
@@ -107,13 +107,29 @@ async function handleListMembers(req, res, params) {
   return sendJSON(res, 200, { member_ids: circleMembers(circle.id).map((m) => m.user_id) });
 }
 
+// The backend has no other way for a client to discover "which circles
+// am I in" — GET /circles/:id only works if you already know the id.
+async function handleMyCircles(req, res) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  const myCircleIds = [...db.members.values()].filter((m) => m.user_id === user.id).map((m) => m.circle_id);
+  const circles = myCircleIds.map((id) => db.circles.get(id)).filter(Boolean);
+  return sendJSON(res, 200, circles);
+}
+
 function createServer() {
   return http.createServer(async (req, res) => {
+    if (applyCors(req, res)) return;
     const { pathname } = url.parse(req.url);
     let params;
     try {
       if (req.method === "POST" && matchRoute("/circles", pathname)) {
         return await handleCreateCircle(req, res);
+      }
+      // Must come before /circles/:id — that pattern's :id would
+      // otherwise swallow the literal "mine" segment.
+      if (req.method === "GET" && matchRoute("/circles/mine", pathname)) {
+        return await handleMyCircles(req, res);
       }
       if (req.method === "GET" && (params = matchRoute("/circles/:id", pathname))) {
         return await handleGetCircle(req, res, params);

@@ -52,6 +52,23 @@ function readBody(req) {
   });
 }
 
+// Minimal CORS support so browser-based clients (the mobile app's Expo
+// web target) can call these services from a different origin/port.
+// Not needed for native iOS/Android — this exists purely to unblock
+// local web-preview testing, since browsers enforce same-origin policy
+// and none of these services otherwise answer OPTIONS.
+function applyCors(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return true;
+  }
+  return false;
+}
+
 function authHeader(req) {
   const h = req.headers["authorization"] || "";
   const [, token] = h.split(" "); // "Bearer <token>"
@@ -74,4 +91,4 @@ function matchRoute(pattern, pathname) {
   return params;
 }
 
-module.exports = { sendJSON, readBody, authHeader, matchRoute };
+module.exports = { sendJSON, readBody, authHeader, matchRoute, applyCors };
