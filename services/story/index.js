@@ -6,14 +6,17 @@
 
 const http = require("http");
 const url = require("url");
-const { db, uuid, nowISO, userFromToken, isMember } = require("../_shared/store");
+const { db, uuid, nowISO } = require("../_shared/store");
 const { sendJSON, readBody, authHeader, matchRoute } = require("../_shared/http");
+const { verifyToken } = require("../_shared/authClient");
+const { isCircleMember, getCircleMembers } = require("../_shared/circleClient");
+const { notify } = require("../notification");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function requireAuth(req, res) {
+async function requireAuth(req, res) {
   const token = authHeader(req);
-  const user = token && userFromToken(token);
+  const user = token && (await verifyToken(token));
   if (!user) {
     sendJSON(res, 401, { error: "authentication required" });
     return null;
@@ -26,9 +29,11 @@ function isActive(story) {
 }
 
 async function handleListStories(req, res, params) {
-  const user = requireAuth(req, res);
+  const user = await requireAuth(req, res);
   if (!user) return;
-  if (!isMember(params.id, user.id)) return sendJSON(res, 403, { error: "not a member of this circle" });
+  if (!(await isCircleMember(params.id, authHeader(req)))) {
+    return sendJSON(res, 403, { error: "not a member of this circle" });
+  }
 
   const stories = [...db.stories.values()]
     .filter((s) => s.circle_id === params.id && isActive(s)) // query-time expiry filter, resolved decision
@@ -42,9 +47,11 @@ async function handleListStories(req, res, params) {
 }
 
 async function handlePostStory(req, res, params) {
-  const user = requireAuth(req, res);
+  const user = await requireAuth(req, res);
   if (!user) return;
-  if (!isMember(params.id, user.id)) return sendJSON(res, 403, { error: "not a member of this circle" });
+  if (!(await isCircleMember(params.id, authHeader(req)))) {
+    return sendJSON(res, 403, { error: "not a member of this circle" });
+  }
 
   const body = await readBody(req);
   if (!body.media_url || !body.media_type) {
@@ -72,24 +79,40 @@ async function handlePostStory(req, res, params) {
       : null,
   };
   db.stories.set(story.id, story);
+
+  if (story.is_collaborative) {
+    // Per SCOPE.md: Notification Service "Talks to: ... Story Service"
+    // is implied by the collaborative-story flow — let the rest of the
+    // circle know there's a story to add to. Circle owns membership, so
+    // ask it for the member list rather than guessing here.
+    const memberIds = await getCircleMembers(params.id, authHeader(req));
+    for (const memberId of memberIds) {
+      if (memberId === user.id) continue; // don't notify the author about their own post
+      notify(memberId, "collab_story_opened", { story_id: story.id, circle_id: params.id });
+    }
+  }
+
   return sendJSON(res, 201, story);
 }
 
+// Service-to-service lookup (Presence uses this via storyClient.js to
+// verify a user is a member of the circle that owns a story before
+// letting them join presence or react — see authorization.test.js).
 async function handleGetStory(req, res, params) {
-  // Added during engineering review: Presence Service needs a way to
-  // verify a user is actually a member of the circle that owns a story
-  // before letting them join presence or react — this endpoint exists
-  // specifically to close that gap (see authorization.test.js).
-  const user = requireAuth(req, res);
+  const user = await requireAuth(req, res);
   if (!user) return;
   const story = db.stories.get(params.id);
-  if (!story || !isActive(story)) return sendJSON(res, 404, { error: "story not found or expired" });
-  if (!isMember(story.circle_id, user.id)) return sendJSON(res, 403, { error: "not a member of this circle" });
+  if (!story || !isActive(story)) {
+    return sendJSON(res, 404, { error: "story not found or expired" });
+  }
+  if (!(await isCircleMember(story.circle_id, authHeader(req)))) {
+    return sendJSON(res, 403, { error: "not a member of this circle" });
+  }
   return sendJSON(res, 200, story);
 }
 
 async function handleContribute(req, res, params) {
-  const user = requireAuth(req, res);
+  const user = await requireAuth(req, res);
   if (!user) return;
   const story = db.stories.get(params.id);
   if (!story) return sendJSON(res, 404, { error: "story not found" });
@@ -102,7 +125,9 @@ async function handleContribute(req, res, params) {
   if (story.collab_window_closes_at && new Date(story.collab_window_closes_at).getTime() <= Date.now()) {
     return sendJSON(res, 410, { error: "collaborative window has closed" });
   }
-  if (!isMember(story.circle_id, user.id)) return sendJSON(res, 403, { error: "not a member of this circle" });
+  if (!(await isCircleMember(story.circle_id, authHeader(req)))) {
+    return sendJSON(res, 403, { error: "not a member of this circle" });
+  }
 
   const body = await readBody(req);
   if (!body.media_url) return sendJSON(res, 400, { error: "media_url is required" });

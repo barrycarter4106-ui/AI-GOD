@@ -1,0 +1,162 @@
+openapi: 3.0.3
+info:
+  title: Pulse Auth Service
+  version: "1.0.0"
+  description: Signup / login / session issuance. Email auth only for MVP.
+servers:
+  - url: http://localhost:4001
+paths:
+  /auth/signup:
+    post:
+      operationId: signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, handle]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: alex@example.com
+                password:
+                  type: string
+                  format: password
+                  example: correct-horse-battery-staple
+                handle:
+                  type: string
+                  example: alexh
+                display_name:
+                  type: string
+                  example: Alex
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+                  token:
+                    type: string
+        "400":
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Email or handle already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /auth/login:
+    post:
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: alex@example.com
+                password:
+                  type: string
+                  format: password
+                  example: correct-horse-battery-staple
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+                  token:
+                    type: string
+        "400":
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /auth/verify:
+    get:
+      operationId: verifyToken
+      description: >
+        Internal, service-to-service endpoint. Circle/Story/Presence call
+        this to resolve a bearer token — see services/_shared/authClient.js.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: >
+            Token is valid. Returns only the user id (least privilege —
+            no email or other profile fields leave Auth over this path).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+        "401":
+          description: Missing, invalid, or expired token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        handle:
+          type: string
+        display_name:
+          type: string
+        avatar_url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        auth_provider:
+          type: string
+          enum: [email, phone, google, apple]
+        email:
+          type: string
+          format: email
+    Error:
+      type: object
+      properties:
+        error:
+          type: string

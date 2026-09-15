@@ -10,7 +10,9 @@ const http = require("http");
 const url = require("url");
 const { attachWebSocketServer } = require("../_shared/ws-lite");
 const { matchRoute, sendJSON, readBody, authHeader } = require("../_shared/http");
-const { userFromToken } = require("../_shared/store");
+const { verifyToken } = require("../_shared/authClient");
+const { getStory } = require("../_shared/storyClient");
+const { notify } = require("../notification");
 
 const RECONNECT_GRACE_MS = 30_000; // confirmed by product owner — see DECISIONS.md
 const ALLOWED_EMOJI = ["❤️", "😂", "😮", "🔥", "👏", "😢"]; // proposed default
@@ -95,12 +97,12 @@ function leavePresence(storyId, userId) {
   // risk under real load with many concurrent leave events.
 }
 
-function reactionHandler(req, res, params) {
-  return (async () => {
-    const token = authHeader(req);
-    const user = token && userFromToken(token);
-    if (!user) return sendJSON(res, 401, { error: "authentication required" });
+async function reactionHandler(req, res, params) {
+  const token = authHeader(req);
+  const user = token && (await verifyToken(token));
+  if (!user) return sendJSON(res, 401, { error: "authentication required" });
 
+<<<<<<< HEAD
     const allowed = await verifyStoryAccess(token, params.id);
     if (!allowed) return sendJSON(res, 403, { error: "not a member of this circle" });
 
@@ -108,29 +110,38 @@ function reactionHandler(req, res, params) {
     if (!ALLOWED_EMOJI.includes(body.emoji)) {
       return sendJSON(res, 400, { error: `emoji must be one of: ${ALLOWED_EMOJI.join(" ")}` });
     }
+=======
+  const body = await readBody(req);
+  if (!ALLOWED_EMOJI.includes(body.emoji)) {
+    return sendJSON(res, 400, { error: `emoji must be one of: ${ALLOWED_EMOJI.join(" ")}` });
+  }
+>>>>>>> origin/main
 
-    broadcast(params.id, {
-      type: "reaction",
-      story_id: params.id,
-      user_id: user.id,
-      emoji: body.emoji,
-      created_at: new Date().toISOString(),
-    });
-    return sendJSON(res, 201, { ok: true });
-  })();
+  broadcast(params.id, {
+    type: "reaction",
+    story_id: params.id,
+    user_id: user.id,
+    emoji: body.emoji,
+    created_at: new Date().toISOString(),
+  });
+  return sendJSON(res, 201, { ok: true });
 }
 
 function createServer() {
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     const { pathname } = url.parse(req.url);
     let params;
-    if (req.method === "POST" && (params = matchRoute("/stories/:id/react", pathname))) {
-      return reactionHandler(req, res, params);
+    try {
+      if (req.method === "POST" && (params = matchRoute("/stories/:id/react", pathname))) {
+        return await reactionHandler(req, res, params);
+      }
+      if (req.method === "GET" && matchRoute("/health", pathname)) {
+        return sendJSON(res, 200, { ok: true, rooms: rooms.size });
+      }
+      sendJSON(res, 404, { error: "not found" });
+    } catch (err) {
+      sendJSON(res, 500, { error: "internal error", detail: err.message });
     }
-    if (req.method === "GET" && matchRoute("/health", pathname)) {
-      return sendJSON(res, 200, { ok: true, rooms: rooms.size });
-    }
-    sendJSON(res, 404, { error: "not found" });
   });
 
   attachWebSocketServer(
@@ -150,7 +161,7 @@ function createServer() {
           return;
         }
         if (msg.type === "identify" && msg.token) {
-          const user = userFromToken(msg.token);
+          const user = await verifyToken(msg.token);
           if (!user) {
             ws.send(JSON.stringify({ type: "error", reason: "invalid_token" }));
             ws.close();
@@ -163,7 +174,18 @@ function createServer() {
             return;
           }
           userId = user.id;
-          joinPresence(params.story_id, userId, ws);
+          const joined = joinPresence(params.story_id, userId, ws);
+
+          // Proposed default (see DECISIONS_PROPOSED.md): notify the
+          // author only on the room's *first* viewer, not every join —
+          // frequency caps beyond that are still an open product
+          // question per presence/SCOPE.md.
+          if (joined && getRoom(params.story_id).size === 1) {
+            const story = await getStory(params.story_id, msg.token);
+            if (story && story.author_id !== userId) {
+              notify(story.author_id, "friends_watching", { story_id: params.story_id, viewer_id: userId });
+            }
+          }
         }
       };
 
