@@ -3,8 +3,8 @@
 // Redis before this handles more than local/seed-test traffic)
 // Scope: services/presence/SCOPE.md
 // Open-decision defaults applied — see DECISIONS_PROPOSED.md:
-//   - 15s reconnect grace period before flipping to "left"
-//   - Fixed 6-emoji reaction set (no free text)
+//   - 30s reconnect grace period before flipping to "left" (confirmed)
+//   - Fixed 6-emoji reaction set (no free text) (confirmed)
 
 const http = require("http");
 const url = require("url");
@@ -14,10 +14,29 @@ const { verifyToken } = require("../_shared/authClient");
 const { getStory } = require("../_shared/storyClient");
 const { notify } = require("../notification");
 
-const RECONNECT_GRACE_MS = 15_000; // proposed default, see DECISIONS_PROPOSED.md
+const RECONNECT_GRACE_MS = 30_000; // confirmed by product owner — see DECISIONS.md
 const ALLOWED_EMOJI = ["❤️", "😂", "😮", "🔥", "👏", "😢"]; // proposed default
 
 const CONCURRENT_VIEWER_CEILING = 200; // resolved decision, per SCOPE.md
+
+const STORY_SERVICE_URL = process.env.STORY_SERVICE_URL || "http://localhost:4003";
+
+// Validates that (a) the story exists and is still active, and (b) the
+// requesting user is actually a member of the circle that owns it.
+// Added during engineering review — this check didn't exist before,
+// meaning any authenticated user could join presence or react on any
+// story if they knew (or guessed) its ID. See authorization.test.js.
+async function verifyStoryAccess(token, storyId) {
+  try {
+    const res = await fetch(`${STORY_SERVICE_URL}/stories/${storyId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.ok;
+  } catch (err) {
+    // Story Service unreachable — fail closed, not open.
+    return false;
+  }
+}
 
 // story_id -> Map<user_id, { ws, leaveTimer }>
 const rooms = new Map();
@@ -72,6 +91,10 @@ function leavePresence(storyId, userId) {
     broadcast(storyId, { type: "presence", status: "left", user_id: userId, viewer_count: room.size });
     if (room.size === 0) rooms.delete(storyId);
   }, RECONNECT_GRACE_MS);
+  entry.leaveTimer.unref(); // don't let this pending timer keep the process alive —
+  // found during code review: test runs were hanging ~30s waiting for this
+  // timer to fire even after the server closed. Also a minor resource-leak
+  // risk under real load with many concurrent leave events.
 }
 
 async function reactionHandler(req, res, params) {
@@ -79,10 +102,20 @@ async function reactionHandler(req, res, params) {
   const user = token && (await verifyToken(token));
   if (!user) return sendJSON(res, 401, { error: "authentication required" });
 
+<<<<<<< HEAD
+    const allowed = await verifyStoryAccess(token, params.id);
+    if (!allowed) return sendJSON(res, 403, { error: "not a member of this circle" });
+
+    const body = await readBody(req);
+    if (!ALLOWED_EMOJI.includes(body.emoji)) {
+      return sendJSON(res, 400, { error: `emoji must be one of: ${ALLOWED_EMOJI.join(" ")}` });
+    }
+=======
   const body = await readBody(req);
   if (!ALLOWED_EMOJI.includes(body.emoji)) {
     return sendJSON(res, 400, { error: `emoji must be one of: ${ALLOWED_EMOJI.join(" ")}` });
   }
+>>>>>>> origin/main
 
   broadcast(params.id, {
     type: "reaction",
@@ -131,6 +164,12 @@ function createServer() {
           const user = await verifyToken(msg.token);
           if (!user) {
             ws.send(JSON.stringify({ type: "error", reason: "invalid_token" }));
+            ws.close();
+            return;
+          }
+          const allowed = await verifyStoryAccess(msg.token, params.story_id);
+          if (!allowed) {
+            ws.send(JSON.stringify({ type: "error", reason: "not_a_member" }));
             ws.close();
             return;
           }

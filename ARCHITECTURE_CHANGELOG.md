@@ -44,4 +44,20 @@ Maintained by the Architecture Agent. Reviewed by the human at each checkpoint (
 - Reaction emoji set (needs Design Agent input first)
 
 ---
-*Next entry should be logged when this PR is reviewed, or at the Week 3 checkpoint — whichever comes first.*
+
+## Entry 3 — Presence Service open decisions confirmed
+**Date:** Post Real-Time Systems Agent kickoff
+**Action:** Product owner confirmed both remaining open items from Entry 2/SCOPE.md.
+
+| Decision | Proposed | Confirmed |
+|---|---|---|
+| Reconnect grace period | 15s | **30s** — prioritizes stable-feeling presence over split-second accuracy on flaky mobile connections |
+| Reaction emoji set | ❤️ 😂 😮 🔥 👏 😢 | **Confirmed as proposed** — set is locked, final iconography still pending Design Agent |
+
+See `services/presence/DECISIONS.md` for full reasoning. All 5 originally
+flagged architecture gaps are now resolved except rate limiting and SMS
+verification vendor, both deliberately deferred past Phase 0.
+
+---
+*Next entry should be logged at the Week 3 checkpoint, or when rate
+limiting / SMS vendor decisions are made — whichever comes first.*
