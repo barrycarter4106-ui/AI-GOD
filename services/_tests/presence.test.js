@@ -163,6 +163,6 @@ test("Presence: notifies the story author when the first viewer joins", async ()
   open -e services/_tests/presence.test.js
   node --test services/_tests/presence.test.js
   assert.equal(events[0].payload.viewer_id, viewer.id);
-
+grep -n "createCircleWithStory\|uuid()" services/_tests/presence.test.js
   ws.close();
 });
