@@ -159,7 +159,9 @@ test("Presence: notifies the story author when the first viewer joins", async ()
   await new Promise((r) => setTimeout(r, 200)); // let identify + the async author lookup settle
 
   const events = getTriggeredFor(author.id).filter((e) => e.type === "friends_watching" && e.payload.story_id === story.id);
-  assert.equal(events.length, 1);
+  assert.equal(events.length, 1)
+  open -e services/_tests/presence.test.js
+  node --test services/_tests/presence.test.js
   assert.equal(events[0].payload.viewer_id, viewer.id);
 
   ws.close();
